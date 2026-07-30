@@ -99,6 +99,17 @@
     color: #525252;
   }
 
+  /* The one thing outside the scale: the number just called. It is read from across a
+     room rather than at reading distance, so it is sized to the screen instead. This
+     is the caller screen's whole job — nothing else may use it. */
+  .callout {
+    font-size: clamp(4rem, 28vw, 7rem);
+    line-height: 1;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+
   /* --- Controls -----------------------------------------------------------
      44px is the floor for anything a thumb has to hit — Apple's HIG number and
      the reason every control here is h-11 and not smaller. */

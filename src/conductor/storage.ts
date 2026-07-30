@@ -20,10 +20,8 @@
 export const STORAGE_KEYS = {
   /** The room setup: name, conditions, points, ticket seed. */
   room: 'tambola:room:setup',
-  /** The game in progress: seed + the order the numbers came out in. */
+  /** The game in progress: the draw seed, how far along it is, and the rulings. */
   game: 'tambola:room:game',
-  /** Claim rulings so far, per seat. */
-  claims: 'tambola:room:claims',
 } as const
 
 export type StorageKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS]

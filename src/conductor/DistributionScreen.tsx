@@ -26,8 +26,13 @@ const PAGE_SIZE = 6
 interface DistributionScreenProps {
   room: StoredRoom
   onToggleIssued: (seat: number) => void
-  onEdit: () => void
+  /** Absent once the rules are frozen, i.e. from the first number out. */
+  onEdit?: () => void
   onDiscard: () => void
+  /** Begin the draw. Only offered when no game is running. */
+  onStart: () => void
+  /** Back to the game in progress. Absent when there isn't one. */
+  onResume?: () => void
 }
 
 export function DistributionScreen({
@@ -35,6 +40,8 @@ export function DistributionScreen({
   onToggleIssued,
   onEdit,
   onDiscard,
+  onStart,
+  onResume,
 }: DistributionScreenProps) {
   const { config, issuedSeats } = room
   const [page, setPage] = useState(0)
@@ -171,17 +178,32 @@ export function DistributionScreen({
       </section>
 
       <section className="stack">
-        <button type="button" className="btn btn-block" disabled>
-          Start calling numbers
-        </button>
-        <p className="muted">
-          The caller and the claim verifier land in the next pass. Until then the room
-          stays here, saved on this device.
-        </p>
+        {onResume === undefined ? (
+          <>
+            <button type="button" className="btn btn-block" onClick={onStart}>
+              Start calling numbers
+            </button>
+            <p className="muted">
+              Hand every ticket out first: the rules freeze the moment the first number
+              comes out.
+            </p>
+          </>
+        ) : (
+          <button type="button" className="btn btn-block" onClick={onResume}>
+            Back to the game
+          </button>
+        )}
 
-        <button type="button" className="btn btn-secondary btn-block" onClick={onEdit}>
-          Edit the setup
-        </button>
+        {onEdit === undefined ? (
+          <p className="muted">
+            The game has started, so the setup is frozen. Points and conditions stay as
+            they are until this game ends.
+          </p>
+        ) : (
+          <button type="button" className="btn btn-secondary btn-block" onClick={onEdit}>
+            Edit the setup
+          </button>
+        )}
 
         {confirmingDiscard ? (
           <div className="card stack-tight">

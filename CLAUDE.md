@@ -75,6 +75,7 @@ src/
                    ticket.ts (generate + verify) · ticketId.ts (the ticket "recipe" ID)
   home/            The front door: two doors, nothing else.
   conductor/       Setup, distribution, the caller, the verifier, conductor storage.
+                   room.ts is the saved setup; game.ts is the game in progress.
   player/          /join and /t. Its own graph. Nothing conductor-side may appear here.
 ```
 
@@ -94,7 +95,8 @@ server — the room code IS the seed.
 
 - `src/index.css` holds the whole system: one font stack, four type sizes (`.title`,
   `.subtitle`, `.label`, `.muted`), one control height (44px — `.btn`, `.field`), one
-  container (`.screen`), one surface (`.card`).
+  container (`.screen`), one surface (`.card`). `.callout` is the single exception, and
+  only the caller screen's just-called number may use it — it is read from across a room.
 - Use those classes. Don't invent a fifth type size or a second button look.
 - Only two colours mean anything: `.is-valid` (green) and `.is-bogey` (red). Everything
   else is black, white or grey.

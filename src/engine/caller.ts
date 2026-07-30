@@ -105,27 +105,20 @@ export function createCaller(seed?: number): Caller {
 }
 
 /**
- * Rebuild a caller from a persisted seed + history, and verify the replay
- * actually reproduces that history before anything trusts it.
+ * The whole draw order for a seed, as a plain array of all 90 numbers.
  *
- * Persisted state is never applied directly (no `new Set(savedHistory)`) — it
- * is REPLAYED through draw(), the same path a live game uses, so the
- * reconstructed caller's internal `drawn` pointer ends up exactly where undo()
- * expects it. The deep-equal check catches the one thing that would make
- * blind replay unsafe: a persisted history that this build's shuffle no
- * longer reproduces from that seed (e.g. rng.ts changed).
+ * A Caller is a stateful object; a saved game is not. Because the order is fixed the
+ * moment the seed is chosen, "the game so far" is just HOW FAR ALONG that order we
+ * are — so the conductor's screen keeps the order in one array and treats the called
+ * numbers as a prefix of it. Drawing is taking one more, undo is taking one fewer, and
+ * a game read back off disk is checked by asking whether its history still is that
+ * prefix (see conductor/game.ts).
  *
- * @returns the reconstructed Caller if the replay matches, or null if it
- *          diverged — treat null like corrupt data, never resume from it.
+ * Same seed => same array, every time, on any device.
  */
-export function replayCaller(seed: number, history: number[]): Caller | null {
+export function drawOrder(seed: number): number[] {
   const caller = createCaller(seed)
-  for (let i = 0; i < history.length; i++) caller.draw()
-
-  const replayed = caller.history
-  const matches =
-    replayed.length === history.length &&
-    replayed.every((n, i) => n === history[i])
-
-  return matches ? caller : null
+  const order: number[] = []
+  for (let n = caller.draw(); n !== null; n = caller.draw()) order.push(n)
+  return order
 }

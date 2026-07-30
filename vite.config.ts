@@ -5,6 +5,12 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
 export default defineConfig({
+  server: {
+    // Vite ignores PORT by default. Honour it so a tool that picks the port for us
+    // (the editor's dev-preview runner) and this config can't disagree about where
+    // the server actually is.
+    port: Number(process.env.PORT) || 5175,
+  },
   plugins: [
     react(),
     tailwindcss(),

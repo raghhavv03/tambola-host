@@ -32,8 +32,8 @@ describe('conductor storage', () => {
   })
 
   it('clears a key', () => {
-    saveJSON(STORAGE_KEYS.claims, { '01': 'valid' })
-    clearKey(STORAGE_KEYS.claims)
-    expect(loadJSON(STORAGE_KEYS.claims)).toBeNull()
+    saveJSON(STORAGE_KEYS.room, { name: 'Diwali' })
+    clearKey(STORAGE_KEYS.room)
+    expect(loadJSON(STORAGE_KEYS.room)).toBeNull()
   })
 })

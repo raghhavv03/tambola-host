@@ -1,5 +1,6 @@
-// Holds a screen wake lock while a host surface is mounted, so the caller's
-// phone (or the cast stage) doesn't sleep mid-game. Host-only.
+// Holds a screen wake lock while the caller screen is mounted, so the conductor's
+// phone doesn't sleep between draws. Conductor-only — it lives in this folder
+// because the player's bundle must never grow a reason to import it.
 //
 // The browser auto-releases the lock whenever the tab is hidden, so we re-acquire
 // on visibilitychange. Fully feature-detected: on a browser without the API

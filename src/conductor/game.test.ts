@@ -1,0 +1,181 @@
+import { describe, it, expect, beforeEach } from 'vitest'
+import { drawOrder } from '../engine/caller'
+import { defaultConditions } from '../engine/patterns'
+import type { RoomConfig } from '../engine/room'
+import { installMockLocalStorage } from '../test/mockLocalStorage'
+import {
+  allConditionsWon,
+  bogeyCount,
+  clearGame,
+  hasBogeyed,
+  isFrozen,
+  latestCall,
+  loadGame,
+  newGame,
+  openConditions,
+  parseStoredGame,
+  saveGame,
+  seatScores,
+  winnerOf,
+  type Ruling,
+  type StoredGame,
+} from './game'
+
+const CONFIG: RoomConfig = {
+  name: 'Diwali 2026',
+  seed: 123456,
+  playerCount: 6,
+  ticketsPerPlayer: 1,
+  conditions: defaultConditions(),
+}
+
+/** A game a few numbers into its draw. */
+function gameAfter(calls: number, rulings: Ruling[] = []): StoredGame {
+  const callSeed = 4242
+  return {
+    callSeed,
+    history: drawOrder(callSeed).slice(0, calls),
+    rulings,
+    ended: false,
+  }
+}
+
+function ruling(conditionId: string, seat: number, valid: boolean): Ruling {
+  return { conditionId, seat, valid, atCall: 10 }
+}
+
+beforeEach(() => {
+  installMockLocalStorage()
+})
+
+describe('a new game', () => {
+  it('starts empty and unfrozen', () => {
+    const game = newGame()
+    expect(game.history).toEqual([])
+    expect(game.rulings).toEqual([])
+    expect(game.ended).toBe(false)
+    expect(isFrozen(game)).toBe(false)
+    expect(latestCall(game)).toBeNull()
+  })
+
+  it('freezes the rules from the first number out', () => {
+    expect(isFrozen(null)).toBe(false)
+    expect(isFrozen(gameAfter(1))).toBe(true)
+  })
+
+  it('reports the number just called', () => {
+    const game = gameAfter(3)
+    expect(latestCall(game)).toBe(game.history[2])
+  })
+})
+
+describe('rulings', () => {
+  it('closes a condition to the first valid claim', () => {
+    const rulings = [ruling('topLine', 3, true), ruling('topLine', 5, true)]
+    expect(winnerOf(rulings, 'topLine')?.seat).toBe(3)
+    expect(winnerOf(rulings, 'fullHouse')).toBeNull()
+  })
+
+  it('a bogey does not close a condition', () => {
+    const rulings = [ruling('topLine', 3, false)]
+    expect(winnerOf(rulings, 'topLine')).toBeNull()
+    expect(openConditions(CONFIG, rulings).map((c) => c.id)).toContain('topLine')
+  })
+
+  it('marks a seat ineligible for the condition it bogeyed, and only that one', () => {
+    const rulings = [ruling('topLine', 3, false)]
+    expect(hasBogeyed(rulings, 'topLine', 3)).toBe(true)
+    expect(hasBogeyed(rulings, 'topLine', 4)).toBe(false)
+    expect(hasBogeyed(rulings, 'middleLine', 3)).toBe(false)
+  })
+
+  it('counts bogeys per seat across conditions', () => {
+    const rulings = [
+      ruling('topLine', 3, false),
+      ruling('middleLine', 3, false),
+      ruling('corners', 5, false),
+      ruling('fullHouse', 3, true),
+    ]
+    expect(bogeyCount(rulings, 3)).toBe(2)
+    expect(bogeyCount(rulings, 5)).toBe(1)
+    expect(bogeyCount(rulings, 0)).toBe(0)
+  })
+
+  it('knows when every condition has been won', () => {
+    expect(allConditionsWon(CONFIG, [])).toBe(false)
+    const all = CONFIG.conditions.map((c, i) => ruling(c.id, i, true))
+    expect(allConditionsWon(CONFIG, all)).toBe(true)
+  })
+})
+
+describe('the scoreboard', () => {
+  it('totals the points of the conditions each seat won, best first', () => {
+    // fullHouse = 35, topLine = 15, earlyFive = 10 in the default split.
+    const rulings = [
+      ruling('topLine', 1, true),
+      ruling('fullHouse', 2, true),
+      ruling('earlyFive', 1, true),
+      ruling('corners', 1, false),
+    ]
+    const scores = seatScores(CONFIG, rulings)
+
+    // Seat 2 took the 35-point Full House; seat 1's two conditions come to 25.
+    expect(scores.map((s) => s.seat)).toEqual([2, 1])
+    expect(scores[0].points).toBe(35)
+    expect(scores[1].points).toBe(25)
+    expect(scores[1].won.map((c) => c.id)).toEqual(['earlyFive', 'topLine'])
+    expect(scores[1].bogeys).toBe(1)
+  })
+
+  it('lists a seat that only bogeyed, on zero points', () => {
+    const scores = seatScores(CONFIG, [ruling('topLine', 4, false)])
+    expect(scores).toEqual([{ seat: 4, points: 0, won: [], bogeys: 1 }])
+  })
+
+  it('is empty when nobody claimed anything', () => {
+    expect(seatScores(CONFIG, [])).toEqual([])
+  })
+})
+
+describe('saving and resuming', () => {
+  it('round-trips a game', () => {
+    const game = gameAfter(12, [ruling('topLine', 2, true)])
+    expect(saveGame(game)).toBe(true)
+    expect(loadGame(CONFIG)).toEqual(game)
+  })
+
+  it('forgets the game when cleared', () => {
+    saveGame(gameAfter(3))
+    clearGame()
+    expect(loadGame(CONFIG)).toBeNull()
+  })
+
+  it('rejects a history that is not the draw order for its seed', () => {
+    const game = gameAfter(5)
+    const tampered = { ...game, history: [...game.history].reverse(), version: 1 }
+    expect(parseStoredGame(tampered, CONFIG)).toBeNull()
+  })
+
+  it('rejects a history longer than the pool', () => {
+    const game = gameAfter(90)
+    const tooLong = { ...game, history: [...game.history, 91], version: 1 }
+    expect(parseStoredGame(tooLong, CONFIG)).toBeNull()
+  })
+
+  it('rejects a ruling for a condition this room is not playing', () => {
+    const game = gameAfter(5, [ruling('somethingElse', 1, true)])
+    expect(parseStoredGame({ ...game, version: 1 }, CONFIG)).toBeNull()
+  })
+
+  it('rejects a ruling for a seat this room does not have', () => {
+    const game = gameAfter(5, [ruling('topLine', 99, true)])
+    expect(parseStoredGame({ ...game, version: 1 }, CONFIG)).toBeNull()
+  })
+
+  it('rejects an unknown version rather than guessing at it', () => {
+    const game = gameAfter(5)
+    expect(parseStoredGame({ ...game, version: 99 }, CONFIG)).toBeNull()
+    expect(parseStoredGame(null, CONFIG)).toBeNull()
+    expect(parseStoredGame('nonsense', CONFIG)).toBeNull()
+  })
+})

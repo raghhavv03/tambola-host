@@ -83,12 +83,45 @@ State, not rules. Read with `PRD.md` (spec), `ROADMAP.md` (plan) and `CLAUDE.md`
     condition → create → distribution → issue toggle → reload → edit; and join by typed
     room code → the right ticket.
 
+- **P3 conductor live game** (branch `major-changes`).
+  - `conductor/game.ts` — the live game (`{ callSeed, history, rulings, ended }` under
+    `tambola:room:game`, versioned, validated on load), plus the pure readers the
+    screens share: `winnerOf`, `hasBogeyed`, `bogeyCount`, `openConditions`,
+    `seatScores`, `allConditionsWon`, `isFrozen`.
+  - **The history is a prefix, not a log.** `engine/caller.ts` gained `drawOrder(seed)`
+    — the whole 90-number order up front — so drawing is "take one more of it", undo is
+    "take one fewer", and the two can't disagree. Loading checks the saved history still
+    IS that prefix; anything else is discarded rather than resumed. `replayCaller` did
+    this job for a stateful Caller and had no consumer left, so it went.
+  - `conductor/CallerScreen` — the called number big, draw / undo, "n called · m left",
+    the previous six, the 90-board, the conditions panel (open / won by seat / points),
+    the bogey tally, end the game. Holds a wake lock while mounted.
+  - `conductor/ClaimVerifier` — seat number *or* ticket ID (a ticket from another room's
+    seed is rejected by name), condition, VALID / BOGEY with the missing numbers, then
+    an explicit confirm. Won conditions leave the list; a seat that bogeyed a condition
+    can never win it (PRD §7.3), and the screen says so instead of offering the button.
+  - `conductor/ResultsScreen` — points per seat, best first, what each won, bogeys, the
+    conditions nobody took, and "play again with these tickets" (same tickets, same
+    split, new draw).
+  - `ConductorApp` is now the four-phase shell: setup → distribution → caller → results,
+    picked with plain if/else. **The rules freeze at the first draw** — from then on the
+    distribution screen offers "Back to the game" instead of "Edit the setup", and
+    `handleSave` refuses anyway.
+  - `index.css` gained `.callout`, the one size outside the four-step scale: the number
+    just called is read from across a room, not at reading distance.
+  - Cleanup in the same pass: dropped the unused `zustand` dependency and the unused
+    `tambola:room:claims` storage key (rulings live inside the game record), moved
+    `useWakeLock` into `conductor/` where it belongs, and taught `vite.config.ts` to
+    honour `PORT` so the dev-preview runner and Vite agree on a port.
+  - Suite: 116 tests, lint and build clean. Walked in the browser: start calling → draw
+    → undo → reload mid-game (resumes) → VALID claim → BOGEY claim with missing numbers
+    → frozen setup → end → results → play again.
+
 ## Next
 
-- **P3 conductor live game** — draw / undo, the 90-board, the conditions panel, the claim
-  verifier (ticket ID + condition → VALID / BOGEY with the missing numbers), bogeys per
-  seat, resume after reload. This is also where **the rules freeze at the first draw**:
-  P2 has no draw to freeze at, so setup stays editable for now. See `ROADMAP.md`.
+- **P4 player journey** — join by QR link and by room code, the ticket screen, call-a-win
+  (records intent, transmits nothing), self-recorded outcome, the prize section.
+  `routes.ts` already carries the room half of a `/t` fragment for this. See `ROADMAP.md`.
 
 ## Key decisions (don't relitigate)
 
@@ -119,6 +152,11 @@ State, not rules. Read with `PRD.md` (spec), `ROADMAP.md` (plan) and `CLAUDE.md`
 - **Early Five is not a special case.** A pattern carries `required`, so Early Five is
   "the whole grid, need 5" and Full House is "the whole grid, need 15". One verification
   path, and custom "any N of these cells" conditions come free.
+- **A game is a pointer into a fixed order** (P3). The draw order is decided by
+  `callSeed`; what gets saved is how far along it we are. Undo is a slice, and a saved
+  history that isn't a prefix of that order is corrupt by definition.
+- **The draw seed is not the ticket seed** (P3). The same set of tickets can be played
+  twice in an evening, and must not repeat the same draw when it is.
 - **A seat number IS the ticket's index**, so seats run 00…N-1 and seat 04 of room K3P9Z
   is the ticket printed `K3P9Z-04`. Starting at 01 would have made the two disagree in
   the exact place people are already squinting — the conductor can type either.

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createCaller, replayCaller } from './caller'
+import { createCaller, drawOrder } from './caller'
 
 // A fixed seed everywhere so every run is identical and failures are reproducible.
 const SEED = 42
@@ -94,37 +94,23 @@ describe('caller.seed', () => {
   })
 })
 
-describe('replayCaller', () => {
-  it('reconstructs the exact state after N draws', () => {
-    const N = 17
-    const reference = createCaller(SEED)
-    const history: number[] = []
-    for (let i = 0; i < N; i++) history.push(reference.draw() as number)
-
-    const replayed = replayCaller(SEED, history)
-    expect(replayed).not.toBeNull()
-    expect(replayed!.history).toEqual(reference.history)
-    expect(replayed!.remaining).toEqual(reference.remaining)
-    expect([...replayed!.called]).toEqual([...reference.called])
+describe('drawOrder', () => {
+  it('is all 90 numbers, once each', () => {
+    const order = drawOrder(SEED)
+    expect(order.length).toBe(90)
+    expect([...order].sort((a, b) => a - b)).toEqual(
+      Array.from({ length: 90 }, (_, i) => i + 1),
+    )
   })
 
-  it('reconstructs correctly after an undo (shorter history)', () => {
-    const reference = createCaller(SEED)
-    for (let i = 0; i < 10; i++) reference.draw()
-    reference.undo() // net 9 draws
-
-    const replayed = replayCaller(SEED, reference.history)
-    expect(replayed).not.toBeNull()
-    expect(replayed!.history).toEqual(reference.history)
-    expect(replayed!.history.length).toBe(9)
+  it('is the same order a caller with that seed draws', () => {
+    const caller = createCaller(SEED)
+    const drawn = Array.from({ length: 90 }, () => caller.draw())
+    expect(drawOrder(SEED)).toEqual(drawn)
   })
 
-  it('returns null when the history does not match a replay from that seed', () => {
-    const tampered = [1, 2, 3, 4, 5]
-    const real = createCaller(SEED)
-    for (let i = 0; i < 5; i++) real.draw()
-    // Guard against a coincidental match breaking this test.
-    expect(tampered).not.toEqual(real.history)
-    expect(replayCaller(SEED, tampered)).toBeNull()
+  it('is identical for the same seed and different for another', () => {
+    expect(drawOrder(SEED)).toEqual(drawOrder(SEED))
+    expect(drawOrder(SEED)).not.toEqual(drawOrder(SEED + 1))
   })
 })
