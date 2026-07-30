@@ -49,11 +49,12 @@ ends with a working app.
 - Condition picker: presets on/off, custom pattern editor on the 3×5 grid, points per
   condition with a live running total and a blocked Start until it hits 100
 - Distribution screen: room code big, per-ticket QRs, seat issue list, print sheet
-- Config persisted locally; game frozen at first draw
+- Config persisted locally (`tambola:room:setup`). Freezing the rules at the first draw
+  moves to P3 — P2 has no draw to freeze at.
 
 ## P3 — Conductor live game
 
-- Draw / undo, big number, 90-board, called count
+- Draw / undo, big number, 90-board, called count; rules freeze at the first draw
 - Conditions panel: open / won-by-seat, points
 - Verifier: ticket ID + condition, VALID / BOGEY with missing numbers, confirm ruling
 - Bogey tracking per seat; results screen at the end

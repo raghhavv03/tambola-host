@@ -11,7 +11,8 @@
 // conductor's screen tracks which ones have gone out (P2).
 
 import { useState } from 'react'
-import { parseTicketId } from '../engine/ticketId'
+import { parseRoomCode } from '../engine/room'
+import { formatTicketId } from '../engine/ticketId'
 import { HOME_ROUTE, PLAYER_ROUTE } from '../routes'
 
 export function JoinForm() {
@@ -22,21 +23,29 @@ export function JoinForm() {
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
 
-    // Seats are shown to players 1-based and padded to two digits ("04"), which
-    // is exactly the second half of a ticket ID.
-    const ticketId = `${code.trim()}-${seat.trim().padStart(2, '0')}`
+    // A room code is the seed the room's tickets grew from, followed by the
+    // room's preset rules. Only the seed half matters here — the rules are for
+    // the prize list. parseRoomCode is forgiving about case, spaces and hyphens
+    // (a player squinting at a phone in a loud room) and strict about
+    // everything else: if it says no, we say no, because guessing would hand
+    // the player a DIFFERENT ticket that looks perfectly valid.
+    const room = parseRoomCode(code)
+    if (room === null) {
+      setError("That room code isn't one this app can read. Check it and try again.")
+      return
+    }
 
-    // parseTicketId is forgiving about case and spacing and strict about
-    // everything else. If it says no, we say no — guessing would hand the
-    // player a DIFFERENT ticket that looks perfectly valid.
-    if (parseTicketId(ticketId) === null) {
-      setError("That room code and seat number don't make a valid ticket.")
+    // The seat number is the ticket's index in the room's set, so seat + seed is
+    // the whole ticket ID. Nothing is looked up anywhere.
+    const seatNumber = Number(seat.trim())
+    if (!Number.isInteger(seatNumber) || seatNumber < 0) {
+      setError('Seat numbers look like 00, 01, 02 — check the one you were given.')
       return
     }
 
     // A full page load, not a client-side route change: /t is a separate bundle
     // on purpose (see main.tsx).
-    window.location.assign(`${PLAYER_ROUTE}#${ticketId.toUpperCase()}`)
+    window.location.assign(`${PLAYER_ROUTE}#${formatTicketId(room.seed, seatNumber)}`)
   }
 
   return (
@@ -60,7 +69,7 @@ export function JoinForm() {
           className="field font-mono tracking-widest uppercase"
           value={code}
           onChange={(event) => setCode(event.target.value)}
-          placeholder="K3P9Z"
+          placeholder="K3P9Z-7QW3"
           autoCapitalize="characters"
           autoCorrect="off"
           spellCheck={false}

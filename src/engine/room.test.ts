@@ -39,6 +39,17 @@ describe('randomSeed', () => {
       expect(formatRoomCode(room({ seed })).split('-')[0].length).toBe(SEED_CHARS)
     }
   })
+
+  it('prints the same seed characters on a ticket ID as in the room code', () => {
+    // formatTicketId does not pad the seed, so a small seed would read "34Z-00" on a
+    // ticket and "0034Z" in the code. randomSeed only draws full-width seeds.
+    for (let i = 0; i < 500; i++) {
+      const seed = randomSeed()
+      expect(formatTicketId(seed, 0).split('-')[0]).toBe(
+        formatRoomCode(room({ seed })).split('-')[0],
+      )
+    }
+  })
 })
 
 describe('room code', () => {

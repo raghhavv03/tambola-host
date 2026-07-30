@@ -50,12 +50,45 @@ State, not rules. Read with `PRD.md` (spec), `ROADMAP.md` (plan) and `CLAUDE.md`
   - Nothing wired into a screen yet — P1 is engine only. Suite: 80 tests, lint and build
     clean.
 
+- **P2 conductor setup + distribution** (branch `major-changes`).
+  - `conductor/ConductorApp` is now the flow shell: loads the saved room on mount, and
+    swaps between setup and distribution in plain state (no router — the only real
+    navigation in this app is between bundles, and that is a page load).
+  - `conductor/SetupScreen` — room name, players, tickets each, seed (shown as the 5
+    base32 characters the conductor reads out, with a "New" button; typing an old seed
+    deals the same tickets again). Problems are listed once, under a disabled button.
+  - `conductor/ConditionsEditor` — presets on/off with points, custom conditions with
+    points and remove, live `points / 100` total, and the D1 warning when custom
+    conditions exist. `conductor/PatternEditor` — name + the 3×5 logical grid + "numbers
+    needed", so "any N of these cells" is a normal condition, not a special case.
+  - `conductor/DistributionScreen` — room code big, the prize list, one QR per seat with
+    a "given out" toggle, 6 per page, print sheet, and a disabled "Start calling numbers"
+    (P3). "Start a different room" asks first.
+  - `conductor/room.ts` — the saved room (`{ config, issuedSeats }`) under
+    `tambola:room:setup`, versioned, with `parseStoredRoom` validating whatever comes
+    back out; seat helpers (`ticketCount`, `playerOfSeat`, `formatSeat`).
+  - `routes.ts` gained the room half of a /t fragment: `#<ticketId>~<encoded room>`.
+    `ticketIdFromHash` ignores it, `roomFromHash` returns it; the player screen reads it
+    in P4. Tested in `routes.test.ts`.
+  - `randomSeed` now only draws seeds that write as five base32 characters, so the room
+    code and the ticket IDs show the same seed instead of `0034Z` vs `34Z-00`.
+  - `player/JoinForm` now parses a real room code (`parseRoomCode`) instead of gluing the
+    typed text onto a seat number — without this, the full code the conductor's screen
+    shows ("TQTE1-ZH8F3RY50") was rejected by the join form. Airgap allowlist gained
+    `engine/room.ts` accordingly; it is pure string work with no way to reach a conductor.
+  - Airgap test now strips comments before the `tambola:marks:` scan — `conductor/
+    storage.ts` explains that rule and names the prefix to do it, and it entered the
+    conductor's graph the moment ConductorApp started saving anything.
+  - Suite: 98 tests, lint and build clean. Walked in the browser: setup → custom
+    condition → create → distribution → issue toggle → reload → edit; and join by typed
+    room code → the right ticket.
+
 ## Next
 
-- **P2 conductor setup** — room name / player count / tickets per player / seed, the
-  condition picker (presets on-off, custom pattern editor on the 3×5 grid, live points
-  total blocking Start until it hits 100), distribution screen, config persisted to
-  `tambola:room:setup`. See `ROADMAP.md`.
+- **P3 conductor live game** — draw / undo, the 90-board, the conditions panel, the claim
+  verifier (ticket ID + condition → VALID / BOGEY with the missing numbers), bogeys per
+  seat, resume after reload. This is also where **the rules freeze at the first draw**:
+  P2 has no draw to freeze at, so setup stays editable for now. See `ROADMAP.md`.
 
 ## Key decisions (don't relitigate)
 
@@ -86,6 +119,14 @@ State, not rules. Read with `PRD.md` (spec), `ROADMAP.md` (plan) and `CLAUDE.md`
 - **Early Five is not a special case.** A pattern carries `required`, so Early Five is
   "the whole grid, need 5" and Full House is "the whole grid, need 15". One verification
   path, and custom "any N of these cells" conditions come free.
+- **A seat number IS the ticket's index**, so seats run 00…N-1 and seat 04 of room K3P9Z
+  is the ticket printed `K3P9Z-04`. Starting at 01 would have made the two disagree in
+  the exact place people are already squinting — the conductor can type either.
+- **Code-joiners see no trace of custom conditions** (not "Custom 1/2/3" as PRD §12 first
+  sketched). A name is what makes a condition callable out loud; an unnamed row is noise.
+  The setup and distribution screens both say so plainly.
+- **QR links carry the whole room** (`#<ticketId>~<blob>`), which makes them dense — hence
+  148px per code on the distribution list. Anything smaller is a QR a phone can't read.
 - **D2 (resolved):** the conductor's ledger is the source of truth; the player's prize
   screen is a copy they maintain themselves. No channel, by design.
 - **D3 (resolved):** Capacitor / `android/` stays in the repo, parked and unbuilt.

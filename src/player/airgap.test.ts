@@ -99,6 +99,10 @@ describe('THE AIRGAP: the player route cannot reach the caller', () => {
       'engine/base32.ts',
       'engine/patterns.ts',
       'engine/rng.ts',
+      // Pure string work: the room code a player types, and the room description a
+      // scanned link carries. Both are read ONCE, from what the player was handed.
+      // Nothing in it can reach the conductor — it has no idea a game is running.
+      'engine/room.ts',
       'engine/ticket.ts',
       'engine/ticketId.ts',
       'player/JoinForm.tsx',
@@ -161,7 +165,9 @@ describe('THE AIRGAP: the conductor cannot reach into the player', () => {
     // ever flow player -> player.
     for (const [path, source] of conductorFiles) {
       expect(
-        source.includes('tambola:marks:'),
+        // Comments stripped first: conductor/storage.ts explains this very rule and
+        // names the prefix to do it. What must not appear is a READ of that key.
+        source.replace(/\/\/.*|\/\*[\s\S]*?\*\//g, '').includes('tambola:marks:'),
         `${path.slice(SRC.length + 1)} touches the player's mark storage`,
       ).toBe(false)
     }

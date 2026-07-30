@@ -272,8 +272,10 @@ cannot know the room's custom condition names or points.
   conditions and their points, packed into a slightly longer code — 5 seed characters
   plus up to 9 of rules, e.g. `K3P9Z-1A2B3C4D5`. Longer than first sketched, still
   typeable; see `PROGRESS.md` for the layout and why points aren't quantised. Custom
-  conditions travel by QR only; if the conductor has defined any, the setup screen says
-  plainly that code-joiners will see them as "Custom 1/2/3" without names. Everything
+  conditions travel by QR only; if the conductor has defined any, the setup and
+  distribution screens say plainly that code-joiners will not see them at all — an
+  unnamed "Custom 1/2/3" row is noise, since a name is what makes a condition callable
+  out loud. Everything
   else — ticket, marking, claiming, bogey — works identically on both paths.
 - **Alternative:** code-joiners see no prize list at all until the conductor reads the
   rules out. Simpler to build, worse to use.

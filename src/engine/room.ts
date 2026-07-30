@@ -59,10 +59,19 @@ export const SEED_BITS = 25
 export const SEED_CHARS = SEED_BITS / BASE32_BITS // 5
 const SEED_LIMIT = 2 ** SEED_BITS
 
+// Smallest seed that writes as five base32 characters without padding. Room codes pad
+// to a fixed width, but a TICKET ID doesn't (formatTicketId pads the index, not the
+// seed) — so a small seed would print "34Z-00" on tickets while the conductor read
+// "0034Z" out to the room. Same value, two different-looking strings, in the one place
+// where people are already squinting. Drawing above this line costs 3% of the seed
+// space and makes the two always match.
+const SMALLEST_FULL_WIDTH_SEED = 32 ** (SEED_CHARS - 1)
+
 /** A fresh random seed for a new room. Math.random is fine — this picks the seed, and
  *  everything downstream is deterministic from it. */
 export function randomSeed(): number {
-  return Math.floor(Math.random() * SEED_LIMIT)
+  const span = SEED_LIMIT - SMALLEST_FULL_WIDTH_SEED
+  return SMALLEST_FULL_WIDTH_SEED + Math.floor(Math.random() * span)
 }
 
 // --- Bit plumbing for the room code --------------------------------------------
