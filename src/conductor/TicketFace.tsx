@@ -1,6 +1,6 @@
-// A ticket drawn read-only, for the HOST's eyes: on the print sheet and in the claim
-// verifier. Not interactive — the only tappable ticket in this app is the player's
-// own, on /t.
+// A ticket drawn read-only, for the CONDUCTOR's eyes: on the print sheet and in the
+// claim verifier. Not interactive — the only tappable ticket in this app is the
+// player's own, on /t.
 //
 // `calledNumbers` is optional and used exclusively by the verifier, where showing
 // which of a ticket's 15 numbers have actually come out is the entire point. It is
@@ -10,9 +10,9 @@ import type { Ticket } from '../engine/ticket'
 
 interface TicketFaceProps {
   ticket: Ticket
-  /** Host-side only: numbers to show as already called. */
+  /** Conductor-side only: numbers to show as already called. */
   calledNumbers?: Set<number>
-  /** 'screen' = dark UI. 'print' = black on white, cell sized for a pen. */
+  /** 'screen' = on-screen sizing. 'print' = cells sized for a pen. */
   variant?: 'screen' | 'print'
 }
 
@@ -50,12 +50,15 @@ export function TicketFace({
           return (
             <div
               key={`${rowIndex}-${colIndex}`}
-              className={`flex items-center justify-center rounded text-sm font-semibold tabular-nums ${
+              // A number that has come out is filled black; one that hasn't is
+              // outlined. That's the only distinction the verifier needs, and it
+              // survives the later visual pass unchanged.
+              className={`flex items-center justify-center rounded border text-sm font-semibold tabular-nums ${
                 value === null
-                  ? 'bg-neutral-900/60'
+                  ? 'border-neutral-200 bg-neutral-100'
                   : called
-                    ? 'bg-emerald-500 text-neutral-950'
-                    : 'bg-neutral-800 text-neutral-400'
+                    ? 'border-black bg-black text-white'
+                    : 'border-neutral-400 bg-white text-black'
               }`}
             >
               {value ?? ''}

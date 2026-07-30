@@ -1,44 +1,198 @@
-/* Self-hosted display font (variable weight+optical size). Bundled by Vite and
-   precached by the PWA — no CDN request, so typography works offline too. */
-@import '@fontsource-variable/fraunces/index.css';
 @import 'tailwindcss';
 
+/* ============================================================================
+   Base look, v2. DELIBERATELY PLAIN.
+   ----------------------------------------------------------------------------
+   There is no design system in this iteration and that is on purpose: white
+   background, black text, black buttons, grey borders. What we DO commit to
+   here is consistency — one font stack, one type scale, one spacing rhythm,
+   one control height. Every screen is laid out where the designed version will
+   put it, so the later visual pass is colour, type and motion, not a rebuild.
+
+   Two colours are semantic and stay even in the plain phase, because they mean
+   something rather than decorate: green = a valid claim, red = a bogey.
+
+   The classes below are hand-written CSS (not @apply) so what you read is what
+   the browser gets — nothing to un-learn later.
+   ========================================================================= */
+
 @theme {
-  /* `font-display` utility — the warm soft-serif voice used for headings and
-     the big called number. Body text stays on the system sans stack. */
-  --font-display: 'Fraunces Variable', ui-serif, Georgia, serif;
+  /* One font stack for everything. `font-mono` (Tailwind default) is used only
+     for ticket IDs and room codes, where character-by-character reading matters. */
+  --font-sans:
+    system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
 }
 
-/* THE primary-action look: the theme's accent with a slight top-light and a
-   soft glow, both mixed from the same token. One definition so DRAW, Start,
-   Resume, and New Game are visually the same action on every screen. Pair it
-   with text-(--board-called-text) — that pairing is contrast-validated by the
-   theme loader. */
-@utility btn-accent {
-  background: linear-gradient(
-    180deg,
-    color-mix(in oklab, var(--board-called), white 12%),
-    var(--board-called)
-  );
-  box-shadow: 0 8px 32px color-mix(in oklab, var(--board-called), transparent 65%);
-}
-
-/* The print stylesheet. Only the ticket sheet ever reaches paper: everything on the
-   host screen is marked print:hidden, and PrintSheet is hidden print:block.
-
-   A4 with an 8mm margin leaves ~194mm of usable width, which is what puts nine
-   columns at ~21mm each — wide enough to strike with a pen. */
-@page {
-  size: A4;
-  margin: 8mm;
-}
-
-@media print {
-  /* The app is a dark screen; paper is white. Forcing it here means the ticket
-     components don't each have to think about it. */
+@layer base {
   html,
+  body,
+  #root {
+    height: 100%;
+  }
+
   body {
     background: #fff;
     color: #000;
+    /* Stops iOS from silently inflating text in landscape. */
+    -webkit-text-size-adjust: 100%;
   }
+
+  /* One visible focus style everywhere, since we have no colour system to lean
+     on. Keyboard users get it; mouse/touch users don't see it (:focus-visible). */
+  :focus-visible {
+    outline: 2px solid #000;
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* --- Layout -------------------------------------------------------------
+     Mobile-first: the conductor is holding a phone and so is every player. The
+     max-width just stops the layout sprawling on a laptop. */
+  .screen {
+    width: 100%;
+    max-width: 34rem; /* ~544px */
+    margin-inline: auto;
+    padding: 1rem 1rem 3rem;
+  }
+
+  .stack {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .stack-tight {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  /* --- Type scale ---------------------------------------------------------
+     Four sizes, no more. Anything that needs a fifth is probably wrong. */
+  .title {
+    font-size: 1.5rem; /* 24 */
+    line-height: 1.2;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  .subtitle {
+    font-size: 1.125rem; /* 18 */
+    line-height: 1.3;
+    font-weight: 600;
+  }
+
+  .label {
+    font-size: 0.75rem; /* 12 */
+    line-height: 1.2;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #525252;
+  }
+
+  .muted {
+    font-size: 0.875rem; /* 14 */
+    line-height: 1.5;
+    color: #525252;
+  }
+
+  /* --- Controls -----------------------------------------------------------
+     44px is the floor for anything a thumb has to hit — Apple's HIG number and
+     the reason every control here is h-11 and not smaller. */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 2.75rem; /* 44px */
+    padding: 0 1.25rem;
+    border: 1px solid #000;
+    border-radius: 0.5rem;
+    background: #000;
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .btn:disabled {
+    background: #e5e5e5;
+    border-color: #e5e5e5;
+    color: #a3a3a3;
+    cursor: not-allowed;
+  }
+
+  /* Same size and shape, lower weight in the hierarchy. */
+  .btn-secondary {
+    background: #fff;
+    color: #000;
+  }
+
+  .btn-secondary:disabled {
+    background: #fff;
+    border-color: #e5e5e5;
+    color: #a3a3a3;
+  }
+
+  /* Full-width action — the default on a phone. */
+  .btn-block {
+    width: 100%;
+  }
+
+  .field {
+    width: 100%;
+    min-height: 2.75rem;
+    padding: 0 0.75rem;
+    border: 1px solid #a3a3a3;
+    border-radius: 0.5rem;
+    background: #fff;
+    color: #000;
+    font-size: 1rem;
+  }
+
+  .field::placeholder {
+    color: #a3a3a3;
+  }
+
+  /* --- Surfaces ----------------------------------------------------------- */
+  .card {
+    border: 1px solid #d4d4d4;
+    border-radius: 0.75rem;
+    padding: 1rem;
+    background: #fff;
+  }
+
+  /* A card that is also a link/button — the two doors on the home screen. */
+  .card-action {
+    display: block;
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  /* --- Semantic ------------------------------------------------------------
+     The only two colours with a job. Kept as text/border colours rather than
+     fills so they read the same when the visual pass lands. */
+  .is-valid {
+    color: #15803d; /* green 700 */
+  }
+
+  .is-bogey {
+    color: #b91c1c; /* red 700 */
+  }
+}
+
+/* ============================================================================
+   Print. Only the ticket sheet ever reaches paper: screen UI is print:hidden,
+   PrintSheet is hidden on screen and print:block. A4 with an 8mm margin leaves
+   ~194mm of usable width — nine columns at ~21mm each, wide enough for a pen.
+   ========================================================================= */
+@page {
+  size: A4;
+  margin: 8mm;
 }

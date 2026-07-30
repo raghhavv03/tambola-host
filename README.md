@@ -1,109 +1,66 @@
-# Tambola Host 🎯
+# Tambola
 
-> **A themed number caller & teleprompter for human hosts running physical Tambola (Housie) games.**
+An app for running a **physical** tambola (housie) game — a party, an office event, a
+family gathering. One person conducts; everyone else plays on their own phone or on
+paper. The app calls numbers and settles claims. It never plays the game for anyone.
 
-The host is the performer, the phone is the teleprompter, and the room is the stage. **Tambola Host** is designed as a physical party prop—not a automated digital game platform.
+> **v2 in progress.** This branch is a rewrite: themes, the TV display mode and the old
+> single-screen host app are gone; two full journeys (conductor and player), joinable
+> room codes and configurable winning conditions are going in. See `PRD.md` for the
+> spec, `ROADMAP.md` for the plan and `PROGRESS.md` for what actually exists today.
 
----
+## The two journeys
 
-## 💡 Core Philosophy
+| Journey | Route | What it does |
+| :-- | :-- | :-- |
+| Front door | `/` | Pick a journey. |
+| Conductor | `/conduct` | Set up a room, hand out tickets, call numbers, verify claims. |
+| Join | `/join` | Enter a room code + seat number to get your ticket. |
+| Player ticket | `/t#<id>` | Your ticket. Mark it yourself. |
 
-Traditional automation destroys the joy of Tambola. This project is built around strict design principles enforced **structurally at build time**:
+## Rules the code enforces
 
-- **No Auto-Marking:** The app never marks tickets automatically. Listening for numbers and marking them on paper or phone *is* the game.
-- **No Player Hints:** No highlight, pulsing, or notifications for missed numbers.
-- **No Auto-Calling:** The host manual draws every number. No automated timer or forced pace.
-- **Strict Airgap:** Player tickets (`/t`) receive data solely from the QR code URL. The player app bundle has **zero network connection, sockets, or shared state** with the host caller.
+- **No auto-marking, no hints, no win announcements.** The player does the matching, in
+  their head, like they would with a paper ticket.
+- **No auto-call.** The conductor taps to draw.
+- **No money.** Winning conditions carry points out of 100 — a percentage for splitting
+  whatever was pooled physically, outside the app. No wallet, no amounts, no pot.
+- **THE AIRGAP.** The player bundle has no channel to the conductor: no fetch, no
+  socket, no shared store, no shared module graph. `src/player/airgap.test.ts` walks the
+  player's real import graph and fails the build if that ever stops being true.
 
----
+## How it works without a backend
 
-## ✨ Key Features
+A ticket ID is a **recipe**, not a database key. `K3P9Z-04` means "ticket 4 of the set
+grown from seed K3P9Z" — any device rebuilds that exact grid from the string alone. So
+the room code is the seed, room code + seat number is a ticket ID, and both QR
+distribution and conductor-side claim verification work with nothing on a server.
 
-- **📱 Interactive Host Controller:** Giant number displays, themed phrases to read aloud, 1–90 board tracking, history log, and instant claim verification.
-- **🎨 Theme Pack System:** Drop-in pure JSON theme packs (`themes/*.json`) with zero component modifications needed. Includes *Mythology (Puranic)* and *Minimal Plain* themes out of the box.
-- **📺 Room / Stage Display:** Dedicated TV/Projector layout (`/?display=1`) for broadcasting the called board to large screens via HDMI or casting.
-- **🛡️ Airgapped Player Tickets:** Independent ticket route (`/t#<id>`) compiled as a isolated JS bundle with automated build-time static import assertions (`src/player/airgap.test.ts`).
-- **⚡ Offline-First PWA & Native Android:** Installable web application with complete offline service worker precaching, plus native Android wrapper via Capacitor.
+## Stack
 
----
+React 19 + TypeScript, Vite 8, Tailwind CSS v4, Vitest, `vite-plugin-pwa` (we own the
+service worker). Capacitor Android wrapper is in the repo but parked this iteration.
 
-## 🛠️ Tech Stack
-
-- **Framework:** [React 19](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/)
-- **Build Tool:** [Vite](https://vitejs.dev/)
-- **Styling:** [Tailwind CSS v4](https://tailwindcss.com/)
-- **State Management:** [Zustand](https://zustand-demo.pmnd.rs/)
-- **Animations:** [Motion](https://motion.dev/)
-- **Testing:** [Vitest](https://vitest.dev/)
-- **PWA & Mobile:** `vite-plugin-pwa` + [Capacitor](https://capacitorjs.com/)
-
----
-
-## 🚀 Application Surfaces
-
-| Surface | Route | Description |
-| :--- | :--- | :--- |
-| **Home Door** | `/` | Select theme preview cards, configure rules, start or resume games. |
-| **Host Caller** | `/` *(Active Game)* | Draw numbers 1–90, view themed phrases, board matrix, undo, and cast. |
-| **Player Ticket** | `/t#<id>` | Scanned ticket surface for players. Completely airgapped from caller state. |
-| **Room Display** | `/?display=1` | Stage view for TVs and projectors showing the live called numbers board. |
-
----
-
-## 🏁 Getting Started
-
-### Prerequisites
-
-- **Node.js** (v18 or higher recommended)
-- **npm** or **pnpm**
-
-### Installation & Setup
-
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/your-username/tambola-host.git
-   cd tambola-host
-   ```
-
-2. **Install dependencies:**
-   ```bash
-   npm install
-   ```
-
-3. **Start the development server:**
-   ```bash
-   npm run dev
-   ```
-   Open `http://localhost:5173` in your browser. Access `http://localhost:5173/?display=1` for the Stage view.
-
----
-
-## 🧪 Testing & Building
+## Getting started
 
 ```bash
-# Run unit & airgap boundary tests
-npm test
-
-# Type-check & generate production web build (PWA & Service Worker)
-npm run build
-
-# Preview production build locally
-npm run preview
-
-# Sync Capacitor native Android app
-npm run cap:sync
+npm install
+npm run dev
 ```
 
----
+```bash
+npm test
+npm run lint
+npm run build
+```
 
-## 📚 Documentation & Guides
+## Docs
 
-- 🎨 **[Theme Pack Authoring Guide](THEME_PACK_GUIDE.md):** How to create and register custom JSON theme packs.
-- 📖 **[Runbook & Native Android Deployment](RUNBOOK.md):** Build sequences, PWA configuration, and Android Play Store packaging.
-- 🎨 **[UI & Token Inventory](UI_INVENTORY.md):** Element-by-element design token breakdown and theme mapping.
+- `PRD.md` — the spec, including the decisions and their trade-offs
+- `ROADMAP.md` — phases, and what each one delivers
+- `PROGRESS.md` — what is built right now
+- `CLAUDE.md` / `AGENTS.md` — rules for agents working in this repo
 
----
+## License
 
-## 📄 License
-
-MIT License. Developed for hosting fun, physical Housie / Tambola events!
+MIT.

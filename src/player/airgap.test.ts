@@ -60,14 +60,15 @@ function importGraph(entry: string): Map<string, string> {
 }
 
 const PLAYER_ENTRY = resolve(SRC, 'player/PlayerApp.tsx')
-const HOST_ENTRY = resolve(SRC, 'App.tsx')
+const CONDUCTOR_ENTRY = resolve(SRC, 'conductor/ConductorApp.tsx')
 
 // Anything that is, or could hand over, the state of the game in progress.
 const FORBIDDEN_MODULES = [
   'engine/caller.ts',
-  'store/gameStore.ts',
-  'store/', // no host store of any kind, present or future
-  'components/', // host components; a player component belongs in src/player/
+  'conductor/', // the conductor's screens, stores and storage
+  'store/', // no shared store of any kind, present or future
+  'home/', // the front door renders in its own bundle
+  'ui/', // shared components are a shared graph; a player one goes in src/player/
 ]
 
 // Every way a browser can open a channel to somewhere else.
@@ -98,20 +99,21 @@ describe('THE AIRGAP: the player route cannot reach the caller', () => {
       'engine/rng.ts',
       'engine/ticket.ts',
       'engine/ticketId.ts',
+      'player/JoinForm.tsx',
       'player/PlayerApp.tsx',
       'player/TicketCell.tsx',
       'player/marks.ts',
-      'ticketLink.ts',
+      'routes.ts',
     ])
   })
 
-  it('imports nothing from the host store, caller, or host components', () => {
+  it('imports nothing from the conductor, the caller, or shared components', () => {
     for (const path of playerFiles.keys()) {
       const relative = path.slice(SRC.length + 1)
       for (const forbidden of FORBIDDEN_MODULES) {
         expect(
           relative.includes(forbidden),
-          `${relative} is reachable from /t but is host-only`,
+          `${relative} is reachable from /t but is conductor-only`,
         ).toBe(false)
       }
     }
@@ -135,7 +137,7 @@ describe('THE AIRGAP: the player route cannot reach the caller', () => {
     const banned = [/\bcalled\b/, /\bcalledNumbers\b/, /\bverifyClaim\b/, /\bdrawn\b/]
     for (const [path, source] of playerFiles) {
       // Skip the shared pure engine: ticket.ts legitimately defines verifyClaim for
-      // the HOST's verifier. What matters is that no player file calls it.
+      // the CONDUCTOR's verifier. What matters is that no player file calls it.
       if (path.includes('/engine/')) continue
       for (const word of banned) {
         expect(
@@ -147,15 +149,15 @@ describe('THE AIRGAP: the player route cannot reach the caller', () => {
   })
 })
 
-describe('THE AIRGAP: the host cannot reach into the player', () => {
-  const hostFiles = importGraph(HOST_ENTRY)
+describe('THE AIRGAP: the conductor cannot reach into the player', () => {
+  const conductorFiles = importGraph(CONDUCTOR_ENTRY)
 
   it('never touches the player-marks storage key', () => {
     // The player's marks live in localStorage, which is same-origin and therefore
-    // technically readable by the host screen. This test is what makes that safe:
-    // nothing on the host side may name that key prefix, so marks only ever flow
-    // player -> player.
-    for (const [path, source] of hostFiles) {
+    // technically readable by the conductor's screen. This test is what makes that
+    // safe: nothing on the conductor side may name that key prefix, so marks only
+    // ever flow player -> player.
+    for (const [path, source] of conductorFiles) {
       expect(
         source.includes('tambola:marks:'),
         `${path.slice(SRC.length + 1)} touches the player's mark storage`,
@@ -164,16 +166,17 @@ describe('THE AIRGAP: the host cannot reach into the player', () => {
   })
 
   it('does not statically import the player screen', () => {
-    // The two screens are separate bundles loaded by separate dynamic imports in
-    // main.tsx. If the host ever imports PlayerApp directly they share a graph again.
-    for (const path of hostFiles.keys()) {
+    // The screens are separate bundles loaded by separate dynamic imports in
+    // main.tsx. If the conductor ever imports PlayerApp directly, they share a
+    // graph again.
+    for (const path of conductorFiles.keys()) {
       expect(path.includes('/player/')).toBe(false)
     }
   })
 
   it('ships a precache-only service worker that relays nothing between clients', () => {
     // The real PWA airgap invariant is NOT "which file calls register()" — it's
-    // that the service worker (which controls BOTH the host tab and /t) can never
+    // that the service worker (which controls BOTH the conductor tab and /t) can never
     // forward a message from one client to another. If it could, that is a channel
     // from the caller into the player's ticket. So the SW source must contain no
     // client enumeration and no postMessage to a client.

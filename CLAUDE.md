@@ -1,84 +1,104 @@
-# Tambola Host
+# Tambola
 
 ## What this is
 
-A themed number-caller for a **human host** running a **physical** tambola (housie)
-game. The host taps to draw a number 1–90; the app shows it big and gives the host a
-themed phrase to say out loud. Players mark their own tickets — paper, or on their own
-phone via `/t`. The matching happens in the player's head. It's a prop for the host,
-not a game platform.
+An app for running a **physical** tambola (housie) game — a party, an office event, a
+family gathering. One person **conducts**: they set up the room, hand out tickets, tap
+to draw numbers 1–90 and call them out loud, and rule on claims. Everyone else
+**plays**: they get a ticket on their own phone (or on paper), mark it themselves, and
+shout when they complete a pattern.
 
-Theme packs (see `THEME_PACK_GUIDE.md` and `themes/mythology.json`) are the actual
-product; the app is a renderer over them.
+Two journeys, one app. `PRD.md` is the spec. `ROADMAP.md` is the plan. `PROGRESS.md` is
+the state — read all three before building.
+
+**This iteration has no design system on purpose.** White background, black text, black
+buttons, grey borders. Consistent sizing, spacing and positioning; no colour system, no
+animation, no theme. Design lands in a later pass and must not require a rebuild.
+
+## Response style
+
+Caveman mode is always on in this repo — see `AGENTS.md`. Chat replies are terse; code,
+comments, commits and docs are written normally.
 
 ## Non-negotiables
 
-- never auto-mark a player's ticket
-- never highlight/hint at a called number on a player's ticket
-- never tell a player they missed one — if they miss it, they miss it, and the app
-  says nothing
-- never auto-call by default
-- never add wallets/coins/prizes/pooling (real-money gaming is illegal in India under
-  the PROG Act 2025)
-- never use third-party IP
-- themes are DATA not code
-- no backend/auth/database
+1. **Never mark a player's ticket for them.** No auto-mark, no highlight, no hint that a
+   number is on their ticket, no "you missed one". If they miss it, they miss it, and
+   the app says nothing.
+2. **Never announce a win.** Winning conditions are checked only when a player has
+   already shouted and the conductor asks the app to check.
+3. **No auto-call by default.** The conductor taps to draw.
+4. **No money in the app.** No wallet, no balance, no currency field, no pot size, no
+   pooling, no payment. Winning conditions carry **points out of 100** — a percentage
+   the humans use to split whatever they pooled physically, outside the app. Real-money
+   gaming is illegal in India (PROG Act 2025) and we stay well clear of the line.
+5. **No third-party IP.**
+6. **No backend, auth or database in this iteration.** Everything is local, static,
+   offline-capable.
 
-**THE AIRGAP.** The player ticket route (`/t`) must never have any channel to the
-caller — no socket, no poll, no fetch, no shared store. It gets its ticket from the URL
-and learns nothing else, ever. The room screen showing a called-numbers board is
-CORRECT and traditional; the player's own ticket cross-referencing it is FATAL. The
-line is not what the app displays — it is **WHO DOES THE MATCHING**, and that stays in
-the player's head. This is structural, not a preference — if a task seems to require a
-channel to `/t`, stop and say so.
+**THE AIRGAP.** The player bundle (`/t`, `/join`) has no channel to the conductor — no
+socket, no poll, no fetch, no shared store, no shared module graph. It learns everything
+it will ever know from the URL it was opened with, and nothing after that. The
+conductor's screen showing a board of numbers already out is CORRECT and traditional;
+the player's own ticket cross-referencing that board is FATAL. The line is not what the
+app displays — it is **WHO DOES THE MATCHING**, and that stays in the player's head.
+This is structural, not a preference: if a task seems to require a channel to the player,
+stop and say so.
 
-If a requested feature violates any of these, say so and stop — don't build a
-"configurable" version of it either.
+If a request violates any of these, say so and stop — don't build a "configurable"
+version of it either.
 
 ## Stack
 
 - Vite 8 + React 19 + TypeScript
-- Tailwind CSS v4 via `@tailwindcss/vite` plugin (no tailwind.config — v4 configures
-  in CSS; entry is `@import 'tailwindcss'` in `src/index.css`)
-- zustand for state, motion (framer-motion successor) for animation
-- Vitest for tests (`npm test`), config in `vitest.config.ts`, node environment
+- Tailwind CSS v4 via `@tailwindcss/vite` (no `tailwind.config` — v4 configures in CSS;
+  entry is `@import 'tailwindcss'` in `src/index.css`)
+- Vitest (`npm test`), node environment, config in `vitest.config.ts`
 - PWA via `vite-plugin-pwa` (injectManifest). We OWN the service worker `src/sw.ts` —
-  precache-only, never relays between clients; `airgap.test.ts` asserts that. Registered
-  in `main.tsx`.
-- No backend. Everything is local, static, offline-capable.
-- **Native:** Capacitor wraps the web build (`android/`, `capacitor.config.ts`) — HOST
-  app only. Players never install it; they scan a QR that opens `/t` in their browser.
-  Native origin is `http://localhost`, so ticket QRs use `VITE_TICKET_ORIGIN` (the
-  deployed web URL) set at build time — see TicketsPanel.
-- **Deploy:** `/t` is a client route with no file behind it, so a static host must
-  rewrite unknown paths to `index.html` or scanned QRs 404. `vercel.json` does this for
-  Vercel; `vite dev` already does it locally.
+  precache-only, never relays between clients; `airgap.test.ts` asserts that.
+- No backend. No state library yet — add one only when a screen actually needs it.
+- **Native:** Capacitor wraps the web build (`android/`, `capacitor.config.ts`) — parked
+  and unbuilt this iteration. Players never install anything; they scan a QR or type a
+  room code.
+- **Deploy:** none of the routes have a file behind them, so a static host must rewrite
+  unknown paths to `index.html` or scanned QRs 404. `vercel.json` does this; `vite dev`
+  already does it locally.
 
-Themes load from `themes/*.json`. Renderer must stay theme-agnostic: adding a theme
-must never require a component change. If it does, the schema is broken — fix the
-schema.
+## Structure
 
-The app has TWO entry points, dynamically imported in `src/main.tsx`: the host screen
-(`src/App.tsx`) and the player ticket (`src/player/PlayerApp.tsx`, route `/t`). They
-are separate bundles with separate module graphs on purpose — that split is how THE
-AIRGAP is enforced structurally rather than by good intentions.
-`src/player/airgap.test.ts` walks the player's import graph and fails the build if it
-can reach the caller, the store, or any network API. If a change makes that test fail,
-the change is wrong, not the test.
+```
+src/
+  routes.ts        URL shapes only. Imported by both bundles — strings, never state.
+  main.tsx         Picks ONE of three entry points by pathname, dynamically imported.
+  engine/          Pure TS: no React, no app imports, no network, no storage.
+                   rng.ts (one seeded PRNG) · caller.ts (draw order) ·
+                   ticket.ts (generate + verify) · ticketId.ts (the ticket "recipe" ID)
+  home/            The front door: two doors, nothing else.
+  conductor/       Setup, distribution, the caller, the verifier, conductor storage.
+  player/          /join and /t. Its own graph. Nothing conductor-side may appear here.
+```
 
-Game logic lives in `src/engine/` — pure TypeScript, no React, no app imports, no
-network/storage. `caller.ts` (number draw order) and `ticket.ts` (ticket generation +
-claim verification) share one seeded PRNG (`rng.ts`). See PROGRESS.md for what's built
-and what's next.
+The three screens are **separate bundles with separate module graphs on purpose** —
+that split is how THE AIRGAP is enforced structurally rather than by good intentions.
+Navigation between them is plain `<a href>` (full page loads), because a client-side
+router would merge the graphs. `src/player/airgap.test.ts` walks the player's real
+import graph and fails the build if it can reach the conductor, the caller, or any
+network API. If a change makes that test fail, **the change is wrong, not the test.**
 
-**UI system:** every host surface is painted by the active theme's stage tokens
-(`src/themes/stage.ts` — CSS variables resolved from the pack's `display`/`accent`
-block, neutral defaults when absent). `btn-accent` in `src/index.css` is the ONE
-primary-button look; `font-display` is Fraunces (self-hosted via `@fontsource`, keeps
-the PWA offline-safe — never add a font CDN). Semantic colors stay unthemed on
-purpose: amber = warning, red = bogey, emerald = valid. The player ticket (`/t`) is
-deliberately neutral — theming it would leak which pack the host runs. The
-screen-by-screen element inventory for UI work is `UI_INVENTORY.md`.
+**Ticket IDs are recipes, not database keys.** `K3P9Z-04` means "ticket 4 of the set
+grown from seed K3P9Z". Any device rebuilds that exact grid from the string alone. This
+is what makes QR distribution, room codes and conductor-side verification work with no
+server — the room code IS the seed.
+
+## UI rules for this iteration
+
+- `src/index.css` holds the whole system: one font stack, four type sizes (`.title`,
+  `.subtitle`, `.label`, `.muted`), one control height (44px — `.btn`, `.field`), one
+  container (`.screen`), one surface (`.card`).
+- Use those classes. Don't invent a fifth type size or a second button look.
+- Only two colours mean anything: `.is-valid` (green) and `.is-bogey` (red). Everything
+  else is black, white or grey.
+- Mobile-first. The conductor is holding a phone and so is every player.
 
 ## Working with me
 
@@ -92,9 +112,19 @@ I'm new to this stack. So:
 
 ## How we work here
 
-- Build features directly, in one pass, the way tasks 1–8 were built. NO multi-doc
-  spec+plan ceremony, no subagent handoffs, no `superpowers` skill chain. Just build it.
-- Tests where they earn it: the engine (`caller`, `ticket`) and persistence get real
-  tests. Components are verified by build + lint + a quick browser check — don't write
-  React component unit tests, don't over-test, don't churn tokens.
-- Keep it simple but impressive. Boring code, sharp result.
+- Build features directly, in one pass. No multi-doc spec+plan ceremony, no subagent
+  handoffs, no `superpowers` skill chain. Just build it.
+- Tests where they earn it: the engine, the encoders and the airgap get real tests.
+  Components are verified by build + lint + a browser check — don't write React
+  component unit tests, don't over-test, don't churn tokens.
+- Keep it simple. Boring code, sharp result.
+
+### End of every iteration (not optional)
+
+1. Run the tests that the change actually touches, plus `npm run lint` and
+   `npm run build`. Nothing more — no test written to pad the count.
+2. Check the change in the browser if it's visible.
+3. Update the docs the change invalidates: `PROGRESS.md` always, `PRD.md` /
+   `ROADMAP.md` / this file when the change alters the plan or the rules.
+4. Report plainly: what was built, what passed, what didn't, and **whether the code is
+   ready to commit**. If something is half-done or a test fails, say so — don't round up.

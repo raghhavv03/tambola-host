@@ -20,15 +20,16 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2,json}'],
       },
       manifest: {
-        name: 'Tambola Host',
+        name: 'Tambola',
         short_name: 'Tambola',
-        description: 'A themed number-caller for a human tambola host.',
+        description:
+          'Run a physical tambola game: call the numbers, hand out tickets, check claims.',
         start_url: '/',
         scope: '/',
         display: 'standalone',
         orientation: 'any',
-        background_color: '#0a0a0a',
-        theme_color: '#0a0a0a',
+        background_color: '#ffffff',
+        theme_color: '#ffffff',
         icons: [
           { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
           { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png' },
