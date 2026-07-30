@@ -2,11 +2,12 @@
 // and the claims ledger. Generic on purpose — P0 only needs the plumbing; the
 // shapes that go through it are defined where they are used (P2/P3).
 //
-// Keys are namespaced `tambola:room:*`, disjoint from the player's
-// `tambola:marks:` prefix (see src/player/marks.ts). That separation is
-// asserted by src/player/airgap.test.ts: no file reachable from the conductor's
-// entry point may so much as name the player's prefix, so marks only ever flow
-// player -> player, on the player's own device.
+// Keys are namespaced `tambola:room:*`, disjoint from the player's two prefixes,
+// `tambola:marks:` (their taps) and `tambola:player:` (the tickets this phone
+// holds and the outcomes they recorded) — see src/player/storage.ts. That
+// separation is asserted by src/player/airgap.test.ts: no file reachable from the
+// conductor's entry point may so much as name a player prefix, so those only ever
+// flow player -> player, on the player's own device.
 //
 // Reads degrade silently to "nothing found" on any failure: private-mode Safari
 // throws on localStorage access, and a conductor whose storage is blocked

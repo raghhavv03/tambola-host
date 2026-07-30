@@ -11,9 +11,9 @@
 // conductor's screen tracks which ones have gone out (P2).
 
 import { useState } from 'react'
-import { parseRoomCode } from '../engine/room'
+import { encodeRoomConfig, parseRoomCode } from '../engine/room'
 import { formatTicketId } from '../engine/ticketId'
-import { HOME_ROUTE, PLAYER_ROUTE } from '../routes'
+import { HOME_ROUTE, PLAYER_ROUTE, ticketFragment } from '../routes'
 
 export function JoinForm() {
   const [code, setCode] = useState('')
@@ -43,9 +43,26 @@ export function JoinForm() {
       return
     }
 
+    // The code carried the room's PRESET conditions and their points, so hand
+    // them on to the ticket screen in the same shape a QR link uses — one decode
+    // path on the other side. The fields a typed code cannot carry stay empty:
+    // there is no room name, and the ticket screen never needs the head count.
+    // Custom conditions travel by QR only (decision D1 in PRD.md).
+    const encodedRoom =
+      room.conditions.length === 0
+        ? undefined
+        : encodeRoomConfig({
+            name: '',
+            seed: room.seed,
+            playerCount: 0,
+            ticketsPerPlayer: 0,
+            conditions: room.conditions,
+          })
+
     // A full page load, not a client-side route change: /t is a separate bundle
     // on purpose (see main.tsx).
-    window.location.assign(`${PLAYER_ROUTE}#${formatTicketId(room.seed, seatNumber)}`)
+    const ticketId = formatTicketId(room.seed, seatNumber)
+    window.location.assign(`${PLAYER_ROUTE}#${ticketFragment(ticketId, encodedRoom)}`)
   }
 
   return (

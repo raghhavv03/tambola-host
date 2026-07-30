@@ -31,25 +31,31 @@ export const PLAYER_ROUTE = '/t'
 const ROOM_SEPARATOR = '~'
 
 /**
+ * The fragment /t is opened with: the ticket ID, and optionally the encoded room
+ * description it arrived with (see engine/room.ts).
+ *
+ * The room rides along so a scanned ticket can show the room's name and its prize
+ * list — the things a typed room code is too short to carry. It is still just a
+ * string in a link, read once when the page opens: nothing here is a channel.
+ */
+export function ticketFragment(ticketId: string, room?: string): string {
+  return room ? `${ticketId}${ROOM_SEPARATOR}${room}` : ticketId
+}
+
+/**
  * Absolute URL to encode into a QR, e.g. "http://192.168.1.5:5173/t#K3P9Z-04".
  *
  * The ticket ID lives in the FRAGMENT, after the '#', on purpose. Fragments are
  * never sent to a server, never land in access logs, never leak through the
  * Referer header. This app has no backend, but a static host still logs paths —
  * the ticket stays client-side no matter where it is deployed.
- *
- * `room` is the encoded room description (see engine/room.ts). It rides along so
- * a scanned ticket can show the room's name and its prize list — the things a
- * typed room code is too short to carry. It is still just a string in a link,
- * read once when the page opens: nothing here is a channel.
  */
 export function ticketUrl(
   origin: string,
   ticketId: string,
   room?: string,
 ): string {
-  const fragment = room ? `${ticketId}${ROOM_SEPARATOR}${room}` : ticketId
-  return `${origin}${PLAYER_ROUTE}#${fragment}`
+  return `${origin}${PLAYER_ROUTE}#${ticketFragment(ticketId, room)}`
 }
 
 /**

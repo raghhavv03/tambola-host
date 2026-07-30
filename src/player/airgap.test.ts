@@ -105,10 +105,19 @@ describe('THE AIRGAP: the player route cannot reach the caller', () => {
       'engine/room.ts',
       'engine/ticket.ts',
       'engine/ticketId.ts',
+      'player/ClaimPanel.tsx',
       'player/JoinForm.tsx',
       'player/PlayerApp.tsx',
+      'player/PrizeList.tsx',
       'player/TicketCell.tsx',
+      'player/TicketScreen.tsx',
+      // The player's own notes, on the player's own device: what they tapped,
+      // which tickets this phone holds, and what they heard the conductor rule.
+      // All three are written by the player and read by nobody else.
+      'player/claims.ts',
       'player/marks.ts',
+      'player/storage.ts',
+      'player/wallet.ts',
       'routes.ts',
     ])
   })
@@ -158,18 +167,23 @@ describe('THE AIRGAP: the player route cannot reach the caller', () => {
 describe('THE AIRGAP: the conductor cannot reach into the player', () => {
   const conductorFiles = importGraph(CONDUCTOR_ENTRY)
 
-  it('never touches the player-marks storage key', () => {
-    // The player's marks live in localStorage, which is same-origin and therefore
-    // technically readable by the conductor's screen. This test is what makes that
-    // safe: nothing on the conductor side may name that key prefix, so marks only
-    // ever flow player -> player.
+  it('never touches the player-side storage keys', () => {
+    // The player's marks, their tickets and their self-recorded claims all live in
+    // localStorage, which is same-origin and therefore technically readable by the
+    // conductor's screen. This test is what makes that safe: nothing on the
+    // conductor side may name a player key prefix, so those only ever flow
+    // player -> player.
+    const playerPrefixes = ['tambola:marks:', 'tambola:player:']
     for (const [path, source] of conductorFiles) {
-      expect(
-        // Comments stripped first: conductor/storage.ts explains this very rule and
-        // names the prefix to do it. What must not appear is a READ of that key.
-        source.replace(/\/\/.*|\/\*[\s\S]*?\*\//g, '').includes('tambola:marks:'),
-        `${path.slice(SRC.length + 1)} touches the player's mark storage`,
-      ).toBe(false)
+      // Comments stripped first: conductor/storage.ts explains this very rule and
+      // names the prefixes to do it. What must not appear is a READ of those keys.
+      const code = source.replace(/\/\/.*|\/\*[\s\S]*?\*\//g, '')
+      for (const prefix of playerPrefixes) {
+        expect(
+          code.includes(prefix),
+          `${path.slice(SRC.length + 1)} touches the player's "${prefix}" storage`,
+        ).toBe(false)
+      }
     }
   })
 

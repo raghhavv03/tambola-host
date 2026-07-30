@@ -117,11 +117,45 @@ State, not rules. Read with `PRD.md` (spec), `ROADMAP.md` (plan) and `CLAUDE.md`
     → undo → reload mid-game (resumes) → VALID claim → BOGEY claim with missing numbers
     → frozen setup → end → results → play again.
 
+- **P4 player journey** (branch `major-changes`).
+  - `player/storage.ts` — the player's own localStorage plumbing, under two prefixes:
+    `tambola:marks:` (their taps, unchanged) and `tambola:player:` (everything added
+    here). `marks.ts` now goes through it and gained `clearMarks`.
+  - `player/wallet.ts` — the tickets this phone has opened (`tambola:player:tickets`),
+    most recent first, capped at 12. This is what makes **multiple tickets on one
+    phone** work: the URL fragment only ever describes one ticket, so without a list
+    the second scan would lose the first. `withTicket` is the pure half, so a
+    freshly-opened ticket appears in the switcher without a write during render.
+  - `player/claims.ts` — the player's self-recorded outcomes per ticket
+    (`tambola:player:claims:<ticketId>`): `claimed` (shouted, waiting) → `won` /
+    `bogey`. Plus `withClaim` and `pointsWon`. Nothing here verifies anything and it
+    must never learn how — the ruling happens on the conductor's device, out loud.
+  - `player/TicketScreen` — room name (QR joiners only), ticket ID, the ticket
+    switcher, the grid, then the claim panel and the prize list. `player/ClaimPanel`
+    — "Call it" writes a note on this phone and says **shout**; the outcome buttons
+    record what the conductor ruled. `player/PrizeList` — won / bogey / running total,
+    each undoable, because a mis-tap on a self-recorded ledger is otherwise permanent.
+  - `PlayerApp` is now the shell: fragment → session (ticket, room, marks, claims),
+    the hashchange listener that swaps ticket, persistence, and "remove this ticket"
+    (which takes that ticket's marks and claims with it). A fragment whose ticket code
+    doesn't parse is *not* remembered, so a mistyped URL can't clutter the switcher.
+  - `JoinForm` now re-encodes the presets a typed room code carried into the same blob
+    a QR uses, so `/t` has one decode path. A code carries no room name and no custom
+    conditions — that is D1, unchanged.
+  - `routes.ts` gained `ticketFragment` (the `#<id>~<room>` half of `ticketUrl`), which
+    is what the ticket switcher and the post-removal jump both build links with.
+  - Airgap: allowlist gained the five new player files; the conductor-side key test now
+    checks both player prefixes, not just `tambola:marks:`.
+  - Suite: 130 tests, lint and build clean. Walked in the browser: setup (2 tickets
+    each) → join by typed code → call a win → won → bogey → open a second ticket by QR
+    fragment (room name shows) → reload → switch tickets (marks and prizes stay with
+    their own ticket) → remove a ticket → bad fragment shows the error and is not saved.
+
 ## Next
 
-- **P4 player journey** — join by QR link and by room code, the ticket screen, call-a-win
-  (records intent, transmits nothing), self-recorded outcome, the prize section.
-  `routes.ts` already carries the room half of a `/t` fragment for this. See `ROADMAP.md`.
+- **P5 consistency pass** — every screen on the same type/spacing/control scale, empty
+  and error states, back navigation everywhere, then a build + lint + browser walk of
+  both journeys end to end. See `ROADMAP.md`.
 
 ## Key decisions (don't relitigate)
 
@@ -168,5 +202,10 @@ State, not rules. Read with `PRD.md` (spec), `ROADMAP.md` (plan) and `CLAUDE.md`
 - **D2 (resolved):** the conductor's ledger is the source of truth; the player's prize
   screen is a copy they maintain themselves. No channel, by design.
 - **D3 (resolved):** Capacitor / `android/` stays in the repo, parked and unbuilt.
-- Storage prefixes are disjoint: player `tambola:marks:`, conductor `tambola:room:`.
+- Storage prefixes are disjoint: player `tambola:marks:` and `tambola:player:`,
+  conductor `tambola:room:`. The airgap test fails the build if the conductor's graph
+  names either player prefix — localStorage is same-origin, so the test is the fence.
+- **The player's prize screen is their own notebook** (P4). They tap what they heard the
+  conductor rule, and they can undo it. It can disagree with the conductor's ledger, and
+  that is the accepted price of having no channel — D2, taken on purpose.
 - `generateSet` gives distinct tickets, not the traditional book-of-6 partition of 1–90.

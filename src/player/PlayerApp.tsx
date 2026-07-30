@@ -16,28 +16,77 @@
 // app exists. `src/player/airgap.test.ts` enforces the structural half of this
 // mechanically: it walks this file's real import graph and fails the build if
 // anything host-side, or any network API, is reachable from here.
+//
+// The prize list and the claim buttons do NOT breach this. The conditions come
+// from the link the player was handed, before a single number came out, and a
+// claim is a note on this phone plus an instruction to shout. Nothing flows the
+// other way — the conductor's ruling reaches this screen through the player's
+// ears and their thumb, which is decision D2 in PRD.md, taken on purpose.
 // =================================================================
 
 import { useEffect, useState } from 'react'
-import { ticketFromId, parseTicketId } from '../engine/ticketId'
-import { JOIN_ROUTE, ticketIdFromHash } from '../routes'
-import { loadMarks, saveMarks } from './marks'
+import { ticketFromId } from '../engine/ticketId'
+import { decodeRoomConfig, type RoomConfig } from '../engine/room'
+import { JOIN_ROUTE, ticketFragment, ticketIdFromHash, roomFromHash } from '../routes'
+import { clearMarks, loadMarks, saveMarks } from './marks'
+import {
+  clearClaims,
+  loadClaims,
+  saveClaims,
+  withClaim,
+  type ClaimLog,
+  type ClaimState,
+} from './claims'
+import {
+  forgetTicket,
+  loadWallet,
+  rememberTicket,
+  withTicket,
+  type WalletTicket,
+} from './wallet'
 import { JoinForm } from './JoinForm'
-import { TicketCell } from './TicketCell'
+import { TicketScreen } from './TicketScreen'
 
-// Everything this screen knows: which ticket, and which cells the player has
-// tapped. Kept as one object so the two can never drift apart — persisting
-// ticket A's marks under ticket B's ID would silently corrupt both.
+// Everything this screen knows: which ticket, which room it came from, which
+// cells the player has tapped, and what they recorded about their own claims.
+// Kept as one object so they can never drift apart — persisting ticket A's marks
+// under ticket B's ID would silently corrupt both.
 interface Session {
   ticketId: string | null
+  /** The room description as it travelled, kept so switching can rebuild the URL. */
+  encodedRoom: string | null
+  room: RoomConfig | null
   marks: Set<number>
+  claims: ClaimLog
 }
 
-// Open a ticket: its ID, plus whatever marks this device already saved for it.
-function openTicket(ticketId: string | null): Session {
+const EMPTY_SESSION: Session = {
+  ticketId: null,
+  encodedRoom: null,
+  room: null,
+  marks: new Set(),
+  claims: {},
+}
+
+/** Open whatever ticket the current URL fragment describes. */
+function openTicket(hash: string): Session {
+  const ticketId = ticketIdFromHash(hash)
+  if (ticketId === null) return EMPTY_SESSION
+
+  // A bare link ("/t#K3P9Z-04", a bookmark, a hand-typed URL) carries no room.
+  // This phone may still remember the one that ticket arrived with, so the prize
+  // list survives a bookmark — it is the player's own note, not a lookup.
+  const encodedRoom =
+    roomFromHash(hash) ??
+    loadWallet().find((entry) => entry.id === ticketId)?.room ??
+    null
+
   return {
     ticketId,
-    marks: ticketId === null ? new Set() : loadMarks(ticketId),
+    encodedRoom,
+    room: encodedRoom === null ? null : decodeRoomConfig(encodedRoom),
+    marks: loadMarks(ticketId),
+    claims: loadClaims(ticketId),
   }
 }
 
@@ -57,27 +106,54 @@ export function PlayerApp({ path }: { path: string }) {
   // On a first scan the marks start empty; after a reload they are the
   // player's own taps, restored from this device.
   const [session, setSession] = useState<Session>(() =>
-    openTicket(ticketIdFromHash(window.location.hash)),
+    openTicket(window.location.hash),
   )
-  const { ticketId, marks } = session
+  // What this phone had remembered when the page opened. It only changes when the
+  // player removes a ticket — opening one is folded in below instead, so the list
+  // on screen is always current without a render-time write.
+  const [storedWallet, setStoredWallet] = useState<WalletTicket[]>(() => loadWallet())
+  const [confirmingForget, setConfirmingForget] = useState(false)
+  const { ticketId, encodedRoom, room, marks, claims } = session
+
+  // Rebuilt from the ID alone — the same grid the conductor handed out, derived
+  // on this device, not fetched from anywhere. Null when the link's code is
+  // broken, which is also what stops a mistyped URL being saved as a ticket.
+  const ticket = ticketId === null ? null : ticketFromId(ticketId)
+  const openId = ticket === null ? null : ticketId
+
+  const wallet =
+    openId === null ? storedWallet : withTicket(storedWallet, openId, encodedRoom)
 
   // Scanning a second QR while /t is already open changes only the URL
   // fragment, which does NOT reload the page. Without this listener the player
   // would keep staring at their previous ticket while the address bar claimed
-  // otherwise.
+  // otherwise. Switching tickets from the list below is the same mechanism.
   useEffect(() => {
     function handleHashChange() {
-      setSession(openTicket(ticketIdFromHash(window.location.hash)))
+      setSession(openTicket(window.location.hash))
+      // Re-read the list too: the ticket we are leaving was written to storage
+      // after this component mounted, so the state from mount is now stale.
+      setStoredWallet(loadWallet())
+      setConfirmingForget(false)
     }
     window.addEventListener('hashchange', handleHashChange)
     return () => window.removeEventListener('hashchange', handleHashChange)
   }, [])
 
-  // Persist on every change. Writing the whole small set is simpler than
-  // tracking deltas, and there are at most 15 numbers in it.
+  // Remember every ticket this phone opens, so a player holding two of them can
+  // switch between the two instead of losing the first to the second scan.
   useEffect(() => {
-    if (session.ticketId !== null) saveMarks(session.ticketId, session.marks)
-  }, [session])
+    if (openId !== null) rememberTicket(openId, encodedRoom)
+  }, [openId, encodedRoom])
+
+  // Persist on every change. Writing the whole small record is simpler than
+  // tracking deltas, and there are at most 15 marks and six conditions in it.
+  useEffect(() => {
+    if (openId !== null) {
+      saveMarks(openId, session.marks)
+      saveClaims(openId, session.claims)
+    }
+  }, [openId, session])
 
   if (path === JOIN_ROUTE) {
     return <JoinForm />
@@ -86,18 +162,11 @@ export function PlayerApp({ path }: { path: string }) {
   if (ticketId === null) {
     return <BadLink reason="This link is missing its ticket code." />
   }
-  if (parseTicketId(ticketId) === null) {
+  if (ticket === null || openId === null) {
     return <BadLink reason={`"${ticketId}" isn't a valid ticket code.`} />
   }
 
-  // Rebuilt from the ID alone — the same grid the conductor handed out,
-  // derived on this device, not fetched from anywhere.
-  const ticket = ticketFromId(ticketId)
-  if (ticket === null) {
-    return <BadLink reason="That ticket code couldn't be rebuilt." />
-  }
-
-  function toggle(value: number) {
+  function toggleMark(value: number) {
     setSession((previous) => {
       const next = new Set(previous.marks)
       if (next.has(value)) {
@@ -109,35 +178,44 @@ export function PlayerApp({ path }: { path: string }) {
     })
   }
 
+  function setClaim(conditionId: string, state: ClaimState | null) {
+    setSession((previous) => ({
+      ...previous,
+      claims: withClaim(previous.claims, conditionId, state),
+    }))
+  }
+
+  // Removing a ticket takes its marks and its claims with it — they are only
+  // meaningful together — and then moves to whatever this phone still holds.
+  function handleForget() {
+    if (ticketId === null) return
+    clearMarks(ticketId)
+    clearClaims(ticketId)
+    const remaining = forgetTicket(ticketId)
+    setStoredWallet(remaining)
+
+    const next = remaining[0]
+    if (next === undefined) {
+      window.location.assign(JOIN_ROUTE)
+      return
+    }
+    // Same page, new fragment: the hashchange listener above opens it.
+    window.location.hash = ticketFragment(next.id, next.room ?? undefined)
+  }
+
   return (
-    <div className="screen stack">
-      <header className="flex items-baseline justify-between">
-        <h1 className="title">Your ticket</h1>
-        <span className="font-mono text-sm tracking-widest">{ticketId}</span>
-      </header>
-
-      {/* 9 columns, 3 rows. Cell width is fixed by the format (nine across a
-          phone), so height is where the touch target gets big enough to hit. */}
-      <div
-        className="grid grid-cols-9 gap-1"
-        style={{ gridTemplateRows: 'repeat(3, clamp(56px, 12vh, 96px))' }}
-      >
-        {ticket.flatMap((row, rowIndex) =>
-          row.map((value, colIndex) => (
-            <TicketCell
-              key={`${rowIndex}-${colIndex}`}
-              value={value}
-              marked={value !== null && marks.has(value)}
-              onToggle={() => value !== null && toggle(value)}
-            />
-          )),
-        )}
-      </div>
-
-      <p className="muted">
-        Tap a number to mark it. Tap it again to clear it. When you complete a
-        pattern, shout your claim out loud — the conductor checks it.
-      </p>
-    </div>
+    <TicketScreen
+      ticketId={ticketId}
+      ticket={ticket}
+      room={room}
+      marks={marks}
+      claims={claims}
+      wallet={wallet}
+      onToggleMark={toggleMark}
+      onSetClaim={setClaim}
+      onForget={handleForget}
+      confirmingForget={confirmingForget}
+      onConfirmForget={setConfirmingForget}
+    />
   )
 }

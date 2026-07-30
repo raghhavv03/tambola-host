@@ -9,7 +9,9 @@
 // Why store at all: a phone locks, a browser evicts a background tab, a thumb hits
 // reload. Losing 40 minutes of marks mid-game is real damage, and the app is
 // forbidden from helping the player reconstruct them (it must never reveal what was
-// called). So the marks have to survive the reload themselves.
+// drawn). So the marks have to survive the reload themselves.
+
+import { readJSON, writeJSON, removeKey } from './storage'
 
 const KEY_PREFIX = 'tambola:marks:'
 
@@ -18,32 +20,22 @@ function storageKey(ticketId: string): string {
 }
 
 /**
- * Read back the marks for one ticket.
- *
- * Every failure path returns an empty set rather than throwing: private-mode Safari
- * throws on localStorage access, and a player whose storage is blocked should still
- * get a working ticket — they just lose reload-survival.
+ * Read back the marks for one ticket. Anything that isn't a list of numbers is
+ * treated as no marks at all: storage survives deploys and devtools, so it is not
+ * a trusted input.
  */
 export function loadMarks(ticketId: string): Set<number> {
-  try {
-    const raw = window.localStorage.getItem(storageKey(ticketId))
-    if (raw === null) return new Set()
-    const parsed: unknown = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return new Set()
-    return new Set(parsed.filter((n): n is number => typeof n === 'number'))
-  } catch {
-    return new Set()
-  }
+  const parsed = readJSON<unknown>(storageKey(ticketId))
+  if (!Array.isArray(parsed)) return new Set()
+  return new Set(parsed.filter((n): n is number => typeof n === 'number'))
 }
 
-/** Persist the marks for one ticket. Silently does nothing if storage is unavailable. */
+/** Persist the marks for one ticket. */
 export function saveMarks(ticketId: string, marks: Set<number>): void {
-  try {
-    window.localStorage.setItem(
-      storageKey(ticketId),
-      JSON.stringify([...marks]),
-    )
-  } catch {
-    // Storage full or blocked. The in-memory marks still work for this page load.
-  }
+  writeJSON(storageKey(ticketId), [...marks])
+}
+
+/** Forget one ticket's marks — the player removing that ticket from this phone. */
+export function clearMarks(ticketId: string): void {
+  removeKey(storageKey(ticketId))
 }
