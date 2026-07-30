@@ -96,6 +96,8 @@ describe('THE AIRGAP: the player route cannot reach the caller', () => {
       .sort()
 
     expect(reachable).toEqual([
+      'engine/base32.ts',
+      'engine/patterns.ts',
       'engine/rng.ts',
       'engine/ticket.ts',
       'engine/ticketId.ts',

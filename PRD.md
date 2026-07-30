@@ -268,8 +268,10 @@ A QR link carries the whole room config in its URL (unbounded length). A six-cha
 typed code carries only the seed. So a code-joiner's phone can build their ticket, but
 cannot know the room's custom condition names or points.
 
-- **Recommended (v1):** the code carries the seed plus the *preset* conditions and their
-  points, packed into a slightly longer code (~8–10 characters, still typeable). Custom
+- **Recommended (v1), built in P1:** the code carries the seed plus the *preset*
+  conditions and their points, packed into a slightly longer code — 5 seed characters
+  plus up to 9 of rules, e.g. `K3P9Z-1A2B3C4D5`. Longer than first sketched, still
+  typeable; see `PROGRESS.md` for the layout and why points aren't quantised. Custom
   conditions travel by QR only; if the conductor has defined any, the setup screen says
   plainly that code-joiners will see them as "Custom 1/2/3" without names. Everything
   else — ticket, marking, claiming, bogey — works identically on both paths.

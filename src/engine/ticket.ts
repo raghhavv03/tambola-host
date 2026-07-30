@@ -6,21 +6,13 @@
 // human has already made, when the host chooses to check it.
 
 import { mulberry32 } from './rng'
+import { rowOfCell, positionOfCell, type Pattern } from './patterns'
 
 // A cell is either a number or a blank.
 export type Cell = number | null
 
 // A ticket is 3 rows × 9 columns. Always exactly 15 numbers and 12 blanks.
 export type Ticket = Cell[][]
-
-// The six standard tambola winning patterns ("dividends").
-export type Dividend =
-  | 'earlyFive' // first 5 numbers anywhere on the ticket
-  | 'topLine' // all 5 numbers in row 0
-  | 'middleLine' // all 5 numbers in row 1
-  | 'bottomLine' // all 5 numbers in row 2
-  | 'corners' // the 4 extreme numbers: first & last of top row, first & last of bottom
-  | 'fullHouse' // all 15 numbers
 
 const ROWS = 3
 const COLS = 9
@@ -197,64 +189,59 @@ export function generateSet(n: number, seed: number): Ticket[] {
 
 export interface ClaimResult {
   valid: boolean // does the claim actually hold given the called numbers?
-  marked: number[] // the relevant ticket numbers that HAVE been called
-  missing: number[] // the relevant ticket numbers that have NOT been called yet
+  marked: number[] // the pattern's ticket numbers that HAVE been called
+  missing: number[] // the pattern's ticket numbers that have NOT been called yet
+  required: number // how many of them the pattern needed
 }
 
-// All the numbers in one row, left to right (blanks skipped).
+// All the numbers in one row, left to right (blanks skipped). Always exactly 5.
 function rowNumbers(ticket: Ticket, row: number): number[] {
   return ticket[row].filter((cell): cell is number => cell !== null)
 }
 
-// The numbers that "count" for a given dividend — the region a player must fill.
-function relevantNumbers(ticket: Ticket, dividend: Dividend): number[] {
-  switch (dividend) {
-    case 'topLine':
-      return rowNumbers(ticket, 0)
-    case 'middleLine':
-      return rowNumbers(ticket, 1)
-    case 'bottomLine':
-      return rowNumbers(ticket, 2)
-    case 'corners': {
-      // First and last number of the top row, and of the bottom row. Each row always
-      // has exactly 5 numbers, so [0] and [length - 1] are always safe.
-      const top = rowNumbers(ticket, 0)
-      const bottom = rowNumbers(ticket, 2)
-      return [top[0], top[top.length - 1], bottom[0], bottom[bottom.length - 1]]
-    }
-    case 'earlyFive':
-    case 'fullHouse':
-      // Both care about the whole ticket; they differ only in how many are required.
-      return ticket.flat().filter((cell): cell is number => cell !== null)
-  }
+/**
+ * The actual ticket numbers a pattern points at.
+ *
+ * This is the translation from the logical 3×5 grid (see patterns.ts) to the printed
+ * 3×9 one: logical cell (r, i) is the i-th number of row r once the blanks are
+ * dropped. Because every row has exactly five numbers, every logical cell resolves on
+ * every ticket — that's the whole reason patterns are defined on the logical grid.
+ */
+export function patternNumbers(ticket: Ticket, pattern: Pattern): number[] {
+  const rows = [rowNumbers(ticket, 0), rowNumbers(ticket, 1), rowNumbers(ticket, 2)]
+  return pattern.cells.map((cell) => rows[rowOfCell(cell)][positionOfCell(cell)])
 }
 
 /**
- * Verify a player's claim for a dividend against the numbers called so far.
+ * Verify a player's claim for one condition against the numbers called so far.
  *
- * IMPORTANT: this does not watch tickets or auto-detect wins. The host calls it only
- * when a player shouts a claim, to confirm or deny it. That's the whole airgap — the
- * app never volunteers that a ticket is one away, never marks anything for the player.
+ * IMPORTANT: this does not watch tickets or auto-detect wins. The conductor calls it
+ * only when a player has already shouted a claim, to confirm or deny it. That's the
+ * whole airgap — the app never volunteers that a ticket is one away, and never marks
+ * anything for the player.
  *
  * @param ticket        the claimant's ticket
  * @param calledNumbers every number drawn so far (order doesn't matter)
- * @param dividend      which pattern is being claimed
+ * @param pattern       the pattern being claimed (from a preset or a custom condition)
  */
 export function verifyClaim(
   ticket: Ticket,
   calledNumbers: number[],
-  dividend: Dividend,
+  pattern: Pattern,
 ): ClaimResult {
   const called = new Set(calledNumbers)
-  const relevant = relevantNumbers(ticket, dividend)
+  const relevant = patternNumbers(ticket, pattern)
 
   const marked = relevant.filter((n) => called.has(n))
   const missing = relevant.filter((n) => !called.has(n))
 
-  // Early Five needs ANY five of the ticket's numbers; every other dividend needs its
-  // whole region complete (nothing missing).
-  const valid =
-    dividend === 'earlyFive' ? marked.length >= 5 : missing.length === 0
-
-  return { valid, marked, missing }
+  // One rule for every condition: enough of the pattern's cells are marked. Shape
+  // patterns need all of theirs (required === cells.length); Early Five is the whole
+  // ticket with required = 5. See patterns.ts.
+  return {
+    valid: marked.length >= pattern.required,
+    marked,
+    missing,
+    required: pattern.required,
+  }
 }

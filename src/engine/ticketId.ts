@@ -14,42 +14,13 @@
 //   setSeed = the seed the whole set of tickets was generated from
 //   index   = which ticket in that set (0-based, zero-padded to 2 digits for looks)
 //
-// Why Crockford base32 and not plain base36: a host types this off a phone screen or
-// a printed sheet, out loud, in a loud room. Base36 contains both O and 0, and both
-// I and 1. Mistype one and you don't get an error — you get a DIFFERENT ticket that
-// verifies perfectly and rules on the wrong claim. This alphabet omits I, L, O and U
-// entirely, and decoding folds the confusable characters back onto their twins, so
-// "K3P0Z-04" and "K3POZ-04" are the same ticket instead of two different ones.
+// The seed is written in Crockford base32 (see base32.ts) precisely because a host
+// types this off a phone screen or a printed sheet, out loud, in a loud room: mistype
+// an O for a 0 in a base36 ID and you don't get an error, you get a DIFFERENT ticket
+// that verifies perfectly and rules on the wrong claim.
 
+import { encodeBase32, decodeBase32 } from './base32'
 import { generateSet, type Ticket } from './ticket'
-
-// Crockford base32: 0-9 then A-Z minus I, L, O, U. (U is dropped in the original
-// spec to avoid accidental profanity; keeping the alphabet identical to a published
-// standard is worth more than the one extra symbol.)
-const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
-
-function encodeBase32(value: number): string {
-  if (value === 0) return '0'
-  let remaining = value
-  let out = ''
-  while (remaining > 0) {
-    out = ALPHABET[remaining % 32] + out
-    remaining = Math.floor(remaining / 32)
-  }
-  return out
-}
-
-/** Decode, folding look-alikes: O -> 0, I and L -> 1. Returns null on any bad char. */
-function decodeBase32(text: string): number | null {
-  let value = 0
-  for (const rawChar of text) {
-    const char = rawChar === 'O' ? '0' : rawChar === 'I' || rawChar === 'L' ? '1' : rawChar
-    const digit = ALPHABET.indexOf(char)
-    if (digit === -1) return null
-    value = value * 32 + digit
-  }
-  return value
-}
 
 /** A ticket ID, taken apart. */
 export interface TicketRef {
