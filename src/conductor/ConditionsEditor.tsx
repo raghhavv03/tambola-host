@@ -15,11 +15,14 @@ import {
   PRESETS,
   TOTAL_POINTS,
   isPresetId,
+  parsePresetCopyId,
   pointsProblem,
   pointsTotal,
+  presetCopy,
   type Condition,
   type Pattern,
 } from '../engine/patterns'
+import { uncarriedConditions } from '../engine/room'
 import { PatternEditor } from './PatternEditor'
 
 interface ConditionsEditorProps {
@@ -59,18 +62,17 @@ function nextCustomId(conditions: Condition[]): string {
  * one condition with a winner count — every prize has its own points and its own
  * winner, which is exactly what a Condition already is. So a duplicate is just another
  * condition whose id is `fullHouse-2`. That id isn't a preset id, so everything
- * downstream already treats it as a custom condition: it can't ride in a typed room
- * code (D1), and formatRoomCode skips it without needing to know it exists.
+ * downstream already treats it as a custom condition — the one exception being the
+ * room code, which CAN carry it, because its name is generated rather than typed
+ * (see engine/room.ts).
  */
 function nextCopyNumber(conditions: Condition[], presetId: string): number {
-  const prefix = `${presetId}-`
   // Highest number in use, not the count: removing "Full House 2" and adding another
   // must not mint an id that "Full House 3" is still holding.
   const used = conditions.map((condition) => {
     if (condition.id === presetId) return 1
-    if (!condition.id.startsWith(prefix)) return 0
-    const suffix = condition.id.slice(prefix.length)
-    return /^\d+$/.test(suffix) ? Number(suffix) : 0
+    const copy = parsePresetCopyId(condition.id)
+    return copy !== null && copy.preset.id === presetId ? copy.number : 0
   })
   return Math.max(1, ...used) + 1
 }
@@ -121,6 +123,9 @@ export function ConditionsEditor({ conditions, onChange }: ConditionsEditorProps
   const total = pointsTotal(conditions)
   const problem = pointsProblem(conditions)
   const custom = conditions.filter((condition) => !isPresetId(condition.id))
+  // A second full house rides in the room code; a pattern the conductor drew and named
+  // cannot. Only the second group gets the "QR only" warning.
+  const uncarried = uncarriedConditions(conditions)
 
   function setPoints(id: string, points: number) {
     onChange(
@@ -162,18 +167,12 @@ export function ConditionsEditor({ conditions, onChange }: ConditionsEditorProps
   function addCopy(presetId: string) {
     const preset = PRESETS.find((entry) => entry.id === presetId)
     if (preset === undefined) return
+    // presetCopy owns the id and the name ("Full House 2" — the name is what gets
+    // called out loud, so it has to distinguish itself from the original). The room
+    // code rebuilds a copy with the same function, which is what keeps the two paths
+    // spelling it identically.
     const number = nextCopyNumber(conditions, presetId)
-    onChange([
-      ...conditions,
-      {
-        id: `${presetId}-${number}`,
-        // The name is what gets called out loud, so it has to distinguish itself from
-        // the original: "Full House" and "Full House 2".
-        name: `${preset.name} ${number}`,
-        pattern: preset.pattern,
-        points: NEW_CUSTOM_POINTS,
-      },
-    ])
+    onChange([...conditions, presetCopy(preset, number, NEW_CUSTOM_POINTS)])
   }
 
   return (
@@ -268,13 +267,13 @@ export function ConditionsEditor({ conditions, onChange }: ConditionsEditorProps
         </button>
       )}
 
-      {custom.length > 0 && (
+      {uncarried.length > 0 && (
         <p className="muted">
-          The conditions above travel by QR code only — a typed room code carries the
-          six presets and nothing else, so that is true of a second full house just as
-          much as of a pattern you drew yourself. Players who join by code will see the
-          presets and their points and nothing about these; read them out, or hand
-          those players a QR.
+          {uncarried.map((condition) => condition.name).join(', ')} travel
+          {uncarried.length === 1 ? 's' : ''} by QR code only — a typed room code has no
+          way to carry a name you typed. Players who join by code see the rest of the
+          list and are told how many points are missing from it; read these ones out, or
+          hand those players a QR.
         </p>
       )}
 

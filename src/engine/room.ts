@@ -25,11 +25,15 @@
 
 import { BASE32_BITS, base32Digit, encodeBase32, BASE32_ALPHABET } from './base32'
 import {
+  MAX_PRESET_COPY,
   PRESETS,
   findPreset,
   isPresetId,
+  parsePresetCopyId,
   patternFromMask,
   patternToMask,
+  pointsTotal,
+  presetCopy,
   TOTAL_POINTS,
   type Condition,
 } from './patterns'
@@ -149,11 +153,26 @@ function bitReader(bits: number[]) {
 //
 //   6 bits  one per preset, in PRESETS order, set when the room plays that condition
 //   7 bits  points for EACH active preset, including the last one
+//   then a list of preset COPIES ("Full House 2"), each introduced by a 1 bit:
+//     1 bit   another copy follows; a 0 bit ends the list
+//     3 bits  which preset it repeats, as an index into PRESETS
+//     2 bits  the copy number, minus 2 — so 2..5, i.e. up to MAX_PRESET_COPY
+//     7 bits  its points
 //
-// So a six-preset room is 6 + 42 = 48 bits = 10 payload characters; a three-condition
-// room is 6. Longer than the "8-10 characters" sketch in PRD.md §12 when all six are
+// So a six-preset room with no copies is 6 + 42 + 1 = 49 bits = 10 payload characters,
+// the same as before copies existed; each copy adds 13 bits, i.e. usually three
+// characters. Longer than the "8-10 characters" sketch in PRD.md §12 when all six are
 // on — the alternative was quantising points to multiples of 5, which is a real
 // product restriction traded for two characters. Not worth it.
+//
+// --- Why copies travel and hand-drawn conditions still don't ---------------------
+//
+// D1 says a typed code cannot carry custom conditions, and the reason is NAMES: a
+// pattern the conductor drew has a name they typed, and free text does not compress
+// into something shoutable. A copy has no typed name — "Full House 2" is generated
+// from a preset every build already knows — so the only thing the code has to carry
+// is which preset, which number and how many points. That fits in 13 bits, so it goes
+// in. A room whose extra prizes are all copies now reads identically on both paths.
 //
 // --- Why the last one is not derived --------------------------------------------
 //
@@ -168,15 +187,55 @@ function bitReader(bits: number[]) {
 
 const PRESET_BITS = PRESETS.length // 6
 const POINTS_BITS = 7 // 0..100 fits in 7 bits
+const PRESET_INDEX_BITS = 3 // an index into the six presets
+const COPY_NUMBER_BITS = 2 // the copy number, minus 2: covers 2..MAX_PRESET_COPY
 
-/** Does this room have conditions a typed code cannot carry? The setup screen warns. */
-export function hasCustomConditions(config: RoomConfig): boolean {
-  return config.conditions.some((condition) => !isPresetId(condition.id))
+/** A preset copy, in the form the code stores it. */
+interface EncodableCopy {
+  presetIndex: number
+  number: number
+  points: number
+}
+
+/** Clamp points into the range the 7-bit field can hold. */
+function clampPoints(points: number): number {
+  return Math.max(0, Math.min(TOTAL_POINTS, points))
+}
+
+/** The room's preset copies that a typed code can actually carry, in the room's order. */
+function encodableCopies(conditions: readonly Condition[]): EncodableCopy[] {
+  const copies: EncodableCopy[] = []
+  for (const condition of conditions) {
+    const copy = parsePresetCopyId(condition.id)
+    if (copy === null) continue
+    // Beyond MAX_PRESET_COPY there is no room in the 2-bit field, so that prize
+    // travels by QR only — same as a hand-drawn one.
+    if (copy.number > MAX_PRESET_COPY) continue
+    copies.push({
+      presetIndex: PRESETS.indexOf(copy.preset),
+      number: copy.number,
+      points: clampPoints(condition.points),
+    })
+  }
+  return copies
+}
+
+/**
+ * The conditions a typed room code cannot carry, so the setup and distribution screens
+ * can say exactly what a code-joiner will not see. Hand-drawn patterns (their names are
+ * free text) and any copy past MAX_PRESET_COPY.
+ */
+export function uncarriedConditions(conditions: readonly Condition[]): Condition[] {
+  return conditions.filter((condition) => {
+    if (isPresetId(condition.id)) return false
+    const copy = parsePresetCopyId(condition.id)
+    return copy === null || copy.number > MAX_PRESET_COPY
+  })
 }
 
 /**
  * The code the conductor reads out. Carries the seed always, and the preset conditions
- * with their points when there are any.
+ * (plus any "Another" copies of them) with their points when there are any.
  */
 export function formatRoomCode(config: RoomConfig): string {
   const seedPart = encodeBase32(config.seed % SEED_LIMIT, SEED_CHARS)
@@ -186,13 +245,21 @@ export function formatRoomCode(config: RoomConfig): string {
     config.conditions.find((condition) => condition.id === preset.id),
   )
   const activeConditions = active.filter((c): c is Condition => c !== undefined)
-  if (activeConditions.length === 0) return seedPart
+  const copies = encodableCopies(config.conditions)
+  if (activeConditions.length === 0 && copies.length === 0) return seedPart
 
   const bits: number[] = []
   for (const condition of active) writeBits(bits, condition ? 1 : 0, 1)
   for (const condition of activeConditions) {
-    writeBits(bits, Math.max(0, Math.min(TOTAL_POINTS, condition.points)), POINTS_BITS)
+    writeBits(bits, clampPoints(condition.points), POINTS_BITS)
   }
+  for (const copy of copies) {
+    writeBits(bits, 1, 1) // "another one follows"
+    writeBits(bits, copy.presetIndex, PRESET_INDEX_BITS)
+    writeBits(bits, copy.number - 2, COPY_NUMBER_BITS)
+    writeBits(bits, copy.points, POINTS_BITS)
+  }
+  writeBits(bits, 0, 1) // end of the copy list
 
   return `${seedPart}-${bitsToBase32(bits)}`
 }
@@ -238,7 +305,6 @@ function decodePresetPayload(payload: string): Condition[] | null {
   if (mask === null) return null
 
   const active = PRESETS.filter((_, i) => (mask & (1 << (PRESET_BITS - 1 - i))) !== 0)
-  if (active.length === 0) return null
 
   const points: number[] = []
   for (let i = 0; i < active.length; i++) {
@@ -250,22 +316,49 @@ function decodePresetPayload(payload: string): Condition[] | null {
     points.push(value)
   }
 
+  const conditions: Condition[] = active.map((preset, i) => ({
+    id: preset.id,
+    name: preset.name,
+    pattern: preset.pattern,
+    points: points[i],
+  }))
+
+  // Then the copies, each announced by a 1 bit. A code written before copies existed
+  // has only zero padding left here, which reads as "no copies" — so the two formats
+  // decode the same way and no old code has to be reissued.
+  for (;;) {
+    const more = reader.read(1)
+    if (more === null || more === 0) break
+
+    const presetIndex = reader.read(PRESET_INDEX_BITS)
+    const number = reader.read(COPY_NUMBER_BITS)
+    const copyPoints = reader.read(POINTS_BITS)
+    if (presetIndex === null || number === null || copyPoints === null) return null
+
+    const preset = PRESETS[presetIndex]
+    if (preset === undefined) return null
+    if (copyPoints < 1 || copyPoints > TOTAL_POINTS) return null
+
+    const condition = presetCopy(preset, number + 2, copyPoints)
+    // Two conditions with the same id would give the player's claim log one key for
+    // two prizes. Impossible from a real room, so the code was mistyped.
+    if (conditions.some((entry) => entry.id === condition.id)) return null
+    conditions.push(condition)
+  }
+
+  if (conditions.length === 0) return null
+
   // At most 100 between them, not exactly 100: the rest may be sitting on conditions
   // this code cannot carry. Over 100 is impossible in a real room, so it was mistyped
   // — better rejected than shown as a broken prize list.
-  if (points.reduce((sum, p) => sum + p, 0) > TOTAL_POINTS) return null
+  if (pointsTotal(conditions) > TOTAL_POINTS) return null
 
   // Anything after the fields we read must be zero padding, and there must be less
   // than a whole character of it — otherwise this isn't the payload we wrote.
   if (!reader.restIsPadding()) return null
   if (bits.length - reader.used() >= BASE32_BITS) return null
 
-  return active.map((preset, i) => ({
-    id: preset.id,
-    name: preset.name,
-    pattern: preset.pattern,
-    points: points[i],
-  }))
+  return conditions
 }
 
 // --- The config blob (QR links) ------------------------------------------------

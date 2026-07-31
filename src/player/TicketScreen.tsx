@@ -6,6 +6,7 @@
 // "you missed one". If they miss it, they miss it, and the app says nothing.
 
 import type { Ticket } from '../engine/ticket'
+import { TOTAL_POINTS, pointsTotal } from '../engine/patterns'
 import type { RoomConfig } from '../engine/room'
 import { HOME_ROUTE, JOIN_ROUTE, PLAYER_ROUTE, ticketFragment } from '../routes'
 import { TicketCell } from './TicketCell'
@@ -45,6 +46,12 @@ export function TicketScreen({
   onConfirmForget,
 }: TicketScreenProps) {
   const conditions = room?.conditions ?? []
+
+  // A room's split always totals 100, so anything short of it is sitting on a prize
+  // this link couldn't name — a pattern the conductor drew, which a typed room code
+  // has no way to carry (decision D1 in PRD.md). Derived rather than carried: the
+  // shortfall IS the answer, and saying it beats a list that quietly adds up to 85.
+  const unnamedPoints = TOTAL_POINTS - pointsTotal(conditions)
 
   // Sorted by ID, not by when they were opened: the switcher must not reshuffle
   // itself every time the player switches ticket.
@@ -123,6 +130,13 @@ export function TicketScreen({
             claims={claims}
             onSetClaim={onSetClaim}
           />
+          {unnamedPoints > 0 && (
+            <p className="muted">
+              This room is also playing for {unnamedPoints} points' worth of prizes this
+              link couldn't name. Ask the conductor what they are — you can still claim
+              them, out loud, the same way.
+            </p>
+          )}
         </>
       ) : (
         <p className="muted">

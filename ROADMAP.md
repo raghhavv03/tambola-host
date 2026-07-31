@@ -110,6 +110,22 @@ ends with a working app.
 - Tests: the record round-trip, the legacy bare-string read, winner-count clamping,
   and the share range including the case that divides evenly.
 
+## P8 — What a typed code carries, and giving a seat out once (from playtesting)
+
+- `engine/patterns.ts`: the preset-copy vocabulary in one place — `presetCopyId`,
+  `presetCopyName`, `presetCopy`, `parsePresetCopyId`, `MAX_PRESET_COPY` — used by both
+  the setup screen and the room code so "Full House 2" is only spelled once.
+- `engine/room.ts`: the room code gains a copy list (1 bit "another follows", 3 bits
+  preset index, 2 bits copy number, 7 bits points, 0 bit to end). An old code decodes
+  unchanged and a copy-less room writes the identical string. `hasCustomConditions`
+  becomes `uncarriedConditions`, which is what the two warnings now name out loud.
+- `player/TicketScreen`: says how many points sit on prizes the link couldn't name,
+  derived as 100 minus what arrived. No extra bits, no channel.
+- `conductor/DistributionScreen`: a seat marked given loses its QR and leaves the print
+  sheet until the conductor undoes it.
+- Tests: copy round-trips (several presets, a copy whose preset is switched off, a
+  sixth copy falling out), the legacy code literal, and copy-id parsing.
+
 ## Later (not this iteration)
 
 Design system and animation · theme packs · native app build · accounts and social

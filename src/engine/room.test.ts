@@ -4,12 +4,19 @@ import {
   parseRoomCode,
   encodeRoomConfig,
   decodeRoomConfig,
-  hasCustomConditions,
+  uncarriedConditions,
   randomSeed,
   SEED_CHARS,
   type RoomConfig,
 } from './room'
-import { defaultConditions, makePattern, cellAt, type Condition } from './patterns'
+import {
+  defaultConditions,
+  findPreset,
+  makePattern,
+  cellAt,
+  presetCopy,
+  type Condition,
+} from './patterns'
 import { formatTicketId, parseTicketId } from './ticketId'
 
 const CUSTOM: Condition = {
@@ -104,7 +111,7 @@ describe('room code', () => {
     const conditions = [...defaultConditions().slice(0, 2), CUSTOM]
     const config = room({ conditions })
 
-    expect(hasCustomConditions(config)).toBe(true)
+    expect(uncarriedConditions(config.conditions)).toEqual([CUSTOM])
     const parsed = parseRoomCode(formatRoomCode(config))
     expect(parsed!.conditions.map((c) => c.id)).toEqual(['earlyFive', 'topLine'])
   })
@@ -127,21 +134,74 @@ describe('room code', () => {
     ])
   })
 
-  it('round-trips a second full house as a condition a code cannot carry', () => {
-    // "Another" mints `fullHouse-2`, which is not a preset id — so it is dropped by
-    // the code exactly like a hand-drawn pattern, and the presets keep their points.
-    const base = defaultConditions()
-    const fullHouse = base.find((c) => c.id === 'fullHouse')!
+  it('round-trips a second full house — its name is generated, not typed', () => {
+    // "Another" mints `fullHouse-2`, whose name comes from a preset every build knows.
+    // Nothing free-text is involved, so unlike a hand-drawn pattern it fits in a code.
     const conditions = [
-      ...base.map((c) => ({ ...c, points: c.id === 'fullHouse' ? 25 : c.points })),
-      { id: 'fullHouse-2', name: 'Full House 2', pattern: fullHouse.pattern, points: 10 },
+      ...defaultConditions().map((c) => ({
+        ...c,
+        points: c.id === 'fullHouse' ? 25 : c.points,
+      })),
+      presetCopy(findPreset('fullHouse')!, 2, 10),
     ]
     const config = room({ conditions })
 
-    expect(hasCustomConditions(config)).toBe(true)
+    expect(uncarriedConditions(config.conditions)).toEqual([])
     const parsed = parseRoomCode(formatRoomCode(config))!
-    expect(parsed.conditions.map((c) => c.id)).not.toContain('fullHouse-2')
-    expect(parsed.conditions.find((c) => c.id === 'fullHouse')!.points).toBe(25)
+    expect(parsed.conditions).toEqual(conditions)
+  })
+
+  it('round-trips several copies of different presets', () => {
+    const conditions = [
+      { ...defaultConditions()[1], points: 40 }, // Top Line
+      presetCopy(findPreset('topLine')!, 2, 30),
+      presetCopy(findPreset('fullHouse')!, 5, 30),
+    ]
+    const parsed = parseRoomCode(formatRoomCode(room({ conditions })))!
+    expect(parsed.conditions).toEqual(conditions)
+  })
+
+  it('carries a copy whose own preset the room turned off', () => {
+    // "Another" is only offered next to an active preset, but the conductor can switch
+    // that preset off afterwards. The copy is its own prize and stands alone.
+    const conditions = [presetCopy(findPreset('fullHouse')!, 2, 100)]
+    const parsed = parseRoomCode(formatRoomCode(room({ conditions })))!
+    expect(parsed.conditions).toEqual(conditions)
+  })
+
+  it('leaves a sixth copy of a preset behind, like a hand-drawn one', () => {
+    // The copy number field is two bits wide, so 2..5 travel and anything past that
+    // goes by QR only. uncarriedConditions is what tells the conductor which.
+    const conditions = [
+      { ...defaultConditions()[5], points: 90 }, // Full House
+      presetCopy(findPreset('fullHouse')!, 6, 10),
+    ]
+    const config = room({ conditions })
+
+    expect(uncarriedConditions(config.conditions).map((c) => c.id)).toEqual([
+      'fullHouse-6',
+    ])
+    const parsed = parseRoomCode(formatRoomCode(config))!
+    expect(parsed.conditions.map((c) => c.id)).toEqual(['fullHouse'])
+  })
+
+  it('still reads a code written before copies existed, and writes the same one', () => {
+    // Literal from a room set up by the previous build: the six presets on the default
+    // split. The copy list ends with a 0 bit, which is what the old format's padding
+    // already was — so an old code decodes unchanged AND a copy-less room still writes
+    // the exact same characters. Nobody has to reissue anything.
+    const legacy = 'FFX6X-ZH8F3RY54C'
+    const parsed = parseRoomCode(legacy)!
+
+    expect(parsed.conditions.map((c) => [c.id, c.points])).toEqual([
+      ['earlyFive', 10],
+      ['topLine', 15],
+      ['middleLine', 15],
+      ['bottomLine', 15],
+      ['corners', 10],
+      ['fullHouse', 35],
+    ])
+    expect(formatRoomCode(room({ seed: parsed.seed }))).toBe(legacy)
   })
 
   it('carries the seed alone when the payload is missing', () => {

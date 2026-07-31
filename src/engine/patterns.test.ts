@@ -11,6 +11,8 @@ import {
   patternFromMask,
   findPreset,
   isPresetId,
+  parsePresetCopyId,
+  presetCopy,
   defaultConditions,
   pointsTotal,
   pointsProblem,
@@ -85,6 +87,30 @@ describe('presets', () => {
     expect(isPresetId('corners')).toBe(true)
     expect(isPresetId('custom-1')).toBe(false)
     expect(findPreset('custom-1')).toBeNull()
+  })
+})
+
+describe('preset copies', () => {
+  it('takes a copy id apart and puts it back together the same way', () => {
+    const copy = parsePresetCopyId('fullHouse-2')
+    expect(copy!.preset.id).toBe('fullHouse')
+    expect(copy!.number).toBe(2)
+    expect(presetCopy(copy!.preset, copy!.number, 10)).toEqual({
+      id: 'fullHouse-2',
+      name: 'Full House 2',
+      pattern: findPreset('fullHouse')!.pattern,
+      points: 10,
+    })
+  })
+
+  it('is not fooled by a preset id, a drawn pattern, or a "copy" numbered 1', () => {
+    // A copy starts at 2 — "Full House 1" is just Full House, which the preset id
+    // already covers, so treating it as a copy would mint a duplicate prize.
+    expect(parsePresetCopyId('fullHouse')).toBeNull()
+    expect(parsePresetCopyId('c1')).toBeNull()
+    expect(parsePresetCopyId('fullHouse-1')).toBeNull()
+    expect(parsePresetCopyId('fullHouse-x')).toBeNull()
+    expect(parsePresetCopyId('-2')).toBeNull()
   })
 })
 

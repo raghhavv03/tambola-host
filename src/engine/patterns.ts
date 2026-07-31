@@ -134,9 +134,71 @@ export function findPreset(id: string): Preset | null {
   return PRESETS.find((preset) => preset.id === id) ?? null
 }
 
-/** Is this condition one of the built-ins? Custom conditions can't ride in a room code. */
+/** Is this condition one of the built-ins? */
 export function isPresetId(id: string): boolean {
   return findPreset(id) !== null
+}
+
+// --- Preset copies ---------------------------------------------------------------
+//
+// "Another" on the setup screen adds a SECOND prize for a pattern the room already
+// plays: id `fullHouse-2`, name "Full House 2". Nothing about it is typed by the
+// conductor — the pattern belongs to the preset and the name is generated from it —
+// which is exactly why, unlike a hand-drawn condition, a copy compresses into a typed
+// room code (see engine/room.ts). Everything else still treats it as a custom
+// condition, because its id is not a preset id.
+//
+// These helpers are the ONE place that spelling lives, so the setup screen and the
+// room code can never mint "Full House 2" two different ways.
+
+/**
+ * Highest copy number a room code can carry, because the code spends two bits on it.
+ * A sixth prize for the same pattern is possible — it just travels by QR only.
+ */
+export const MAX_PRESET_COPY = 5
+
+/** A copy, taken apart: which preset it repeats and which number it is. */
+export interface PresetCopy {
+  preset: Preset
+  /** 2 for the second prize of that pattern, 3 for the third, and so on. */
+  number: number
+}
+
+/** The id "Another" mints: `fullHouse-2`. */
+export function presetCopyId(presetId: string, number: number): string {
+  return `${presetId}-${number}`
+}
+
+/** The name "Another" mints: "Full House 2" — what the conductor calls out loud. */
+export function presetCopyName(preset: Preset, number: number): string {
+  return `${preset.name} ${number}`
+}
+
+/** `fullHouse-2` → the preset and the number. Null for a preset id or a drawn pattern. */
+export function parsePresetCopyId(id: string): PresetCopy | null {
+  const split = id.lastIndexOf('-')
+  if (split <= 0) return null
+
+  const preset = findPreset(id.slice(0, split))
+  if (preset === null) return null
+
+  const suffix = id.slice(split + 1)
+  if (!/^\d+$/.test(suffix)) return null
+
+  // A copy starts at 2: "Full House 1" is just Full House, and the preset id already
+  // covers it.
+  const number = Number(suffix)
+  return number >= 2 ? { preset, number } : null
+}
+
+/** A copy as a whole condition: the preset's pattern, its own name and its own points. */
+export function presetCopy(preset: Preset, number: number, points: number): Condition {
+  return {
+    id: presetCopyId(preset.id, number),
+    name: presetCopyName(preset, number),
+    pattern: preset.pattern,
+    points,
+  }
 }
 
 /**

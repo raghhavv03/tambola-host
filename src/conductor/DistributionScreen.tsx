@@ -8,13 +8,18 @@
 // Two ways in, one ticket:
 //   - QR: the link carries the ticket ID and the whole room description, so a scanned
 //     ticket knows the room's name and its full prize list, custom conditions included.
-//   - Room code: five characters plus the preset split. Short enough to shout across a
-//     room, too short to carry custom rules — decision D1 in PRD.md.
+//   - Room code: five characters plus the prize split. Short enough to shout across a
+//     room, too short to carry a name the conductor typed — decision D1 in PRD.md.
 // Neither is a channel. Both are read once, when the player's page opens.
+//
+// A seat that has been handed over stops being offered: its QR goes, and it drops out
+// of the print sheet. The only way it comes back is the conductor undoing the tick,
+// which is the point — a QR still on screen next to "Given out" is the one thing that
+// puts the same ticket in two people's hands.
 
 import { useMemo, useState } from 'react'
 import { generateIdentifiedSet } from '../engine/ticketId'
-import { encodeRoomConfig, formatRoomCode, hasCustomConditions } from '../engine/room'
+import { encodeRoomConfig, formatRoomCode, uncarriedConditions } from '../engine/room'
 import { JOIN_ROUTE, ticketUrl } from '../routes'
 import { QrCode } from './QrCode'
 import { PrintSheet } from './PrintSheet'
@@ -66,9 +71,18 @@ export function DistributionScreen({
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const pageTickets = tickets.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE)
 
+  // Paper is a way of handing a ticket out too, so a seat already given away is not on
+  // the sheet. Reprinting the whole set halfway through is exactly how a seat ends up
+  // in two pairs of hands.
+  const unissued = tickets.filter((entry) => !issued.has(entry.index))
+
+  // Conditions a typed room code cannot carry, named so the conductor knows precisely
+  // what a code-joiner will be missing.
+  const uncarried = uncarriedConditions(config.conditions)
+
   if (printing) {
     // PrintSheet opens the print dialog as it mounts and calls back when it closes.
-    return <PrintSheet tickets={tickets} onDone={() => setPrinting(false)} />
+    return <PrintSheet tickets={unissued} onDone={() => setPrinting(false)} />
   }
 
   return (
@@ -82,11 +96,12 @@ export function DistributionScreen({
           Players open <span className="font-mono">{origin.replace(/^https?:\/\//, '')}
           {JOIN_ROUTE}</span>, type this code and the seat number you give them.
         </p>
-        {hasCustomConditions(config) && (
+        {uncarried.length > 0 && (
           <p className="muted">
-            This room has custom conditions, which a typed code can't carry. Players who
-            join by code see the preset conditions only — give them a QR instead, or read
-            the custom ones out.
+            A typed code can't carry {uncarried.map((c) => c.name).join(', ')} — the name
+            is one you typed. Players who join by code see the rest of the list, and are
+            told how many points are missing from it; give them a QR instead, or read
+            those conditions out.
           </p>
         )}
       </section>
@@ -117,27 +132,47 @@ export function DistributionScreen({
             const given = issued.has(seat)
             return (
               <li key={entry.id} className="card flex items-center gap-4">
-                {/* Big enough to matter: this QR carries the whole room, so it has
-                    a lot of modules and a small one is a QR a phone can't read. */}
-                <QrCode
-                  value={ticketUrl(origin, entry.id, encodedRoom)}
-                  size={148}
-                  className="shrink-0"
-                />
+                {given ? (
+                  // The QR is gone, not greyed out: a scannable code next to the words
+                  // "Given out" is exactly how one seat reaches two people. The box
+                  // stays the same size so the list doesn't jump as seats go out.
+                  <div className="flex size-[148px] shrink-0 items-center justify-center border border-neutral-300">
+                    <span className="muted">Given out</span>
+                  </div>
+                ) : (
+                  /* Big enough to matter: this QR carries the whole room, so it has
+                     a lot of modules and a small one is a QR a phone can't read. */
+                  <QrCode
+                    value={ticketUrl(origin, entry.id, encodedRoom)}
+                    size={148}
+                    className="shrink-0"
+                  />
+                )}
                 <div className="stack-tight min-w-0 flex-1">
                   <span className="subtitle tabular-nums">Seat {formatSeat(seat)}</span>
                   <span className="muted font-mono break-all">{entry.id}</span>
                   <span className="muted">
                     Player {playerOfSeat(seat, config.ticketsPerPlayer)}
                   </span>
-                  <button
-                    type="button"
-                    className={`btn ${given ? '' : 'btn-secondary'}`}
-                    onClick={() => onToggleIssued(seat)}
-                    aria-pressed={given}
-                  >
-                    {given ? 'Given out' : 'Mark given'}
-                  </button>
+                  {given ? (
+                    // Undoing is deliberately the smaller action of the two: marking a
+                    // seat given is the common tap, taking it back is the correction.
+                    <button
+                      type="button"
+                      className="btn-inline self-start"
+                      onClick={() => onToggleIssued(seat)}
+                    >
+                      Undo
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => onToggleIssued(seat)}
+                    >
+                      Mark given
+                    </button>
+                  )}
                 </div>
               </li>
             )
@@ -172,9 +207,18 @@ export function DistributionScreen({
           type="button"
           className="btn btn-secondary btn-block"
           onClick={() => setPrinting(true)}
+          disabled={unissued.length === 0}
         >
-          Print all {total} tickets
+          {issued.size === 0
+            ? `Print all ${total} tickets`
+            : `Print the ${unissued.length} not given out`}
         </button>
+        {issued.size > 0 && unissued.length > 0 && (
+          <p className="muted">
+            Seats already given out are left off the sheet. Undo one above to print it
+            again.
+          </p>
+        )}
       </section>
 
       <section className="stack">

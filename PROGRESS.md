@@ -250,9 +250,49 @@ State, not rules. Read with `PRD.md` (spec), `ROADMAP.md` (plan) and `CLAUDE.md`
     TypeScript accepts a narrower function where a wider one is expected, so nothing
     failed to compile. Both widened.
 
+- **P8 what a typed code can carry, and giving a seat out once** (branch `major-changes`)
+  — from playtesting.
+  - **"Another" prizes now ride in the room code.** The reported bug was "change the
+    winning conditions before the game starts and the QR updates but the code doesn't":
+    true whenever the change was a custom condition, since a code carried presets only.
+    The reason D1 gives for that is NAMES — free text doesn't compress into something
+    shoutable — and a copy has no typed name. `fullHouse-2` / "Full House 2" is
+    generated from a preset every build already knows, so all the code has to carry is
+    which preset, which number and how many points.
+  - `engine/patterns.ts` gained the copy vocabulary in one place — `presetCopyId`,
+    `presetCopyName`, `presetCopy`, `parsePresetCopyId`, `MAX_PRESET_COPY` — so the
+    setup screen and the room code can't mint "Full House 2" two different ways.
+    `ConditionsEditor` now builds copies with it instead of its own string glue.
+  - Room code layout gained a tail: after the preset points, a 1 bit means "another
+    copy follows", then 3 bits of preset index, 2 bits of copy number (2..5) and 7 bits
+    of points; a 0 bit ends the list. **An old code decodes unchanged and a copy-less
+    room writes the exact same characters** — the terminating 0 lands where the old
+    format's zero padding already was, which `room.test.ts` pins with a literal code
+    from the previous build. Each copy costs about three characters.
+  - `hasCustomConditions` became `uncarriedConditions(conditions)`, which returns the
+    conditions a code genuinely can't carry — hand-drawn patterns, and copies past
+    `MAX_PRESET_COPY`. Both warnings now NAME them ("A typed code can't carry
+    Diagonal") instead of lumping a second full house in with them.
+  - **The player is told what's missing, without carrying it.** A split always totals
+    100, so `TOTAL_POINTS - pointsTotal(conditions)` IS the points sitting on prizes
+    the link couldn't name. `TicketScreen` says so in one line. Free — no bits, no
+    channel — and it beats a prize list that quietly adds up to 90.
+  - **A seat given out stops being offered.** The distribution row used to keep its QR
+    next to a "Given out" toggle, which is exactly how one ticket reaches two people.
+    Now the QR is replaced by a same-size "Given out" box, the toggle becomes a
+    `.btn-inline` "Undo", and given seats drop out of the print sheet ("Print the 11
+    not given out", disabled at zero). Undoing puts both back.
+  - Suite: 165 tests, lint and build clean. Walked in the browser at 375×812: edit a
+    room mid-distribution → "Another" full house → code grows to `FFX6X-ZJGF3RY51Z850`
+    → join by that typed code shows "Full House 2 · 10 pts" → add a hand-drawn
+    "Diagonal" → both warnings name only Diagonal → join by code shows the other seven
+    prizes plus "also playing for 10 points' worth of prizes this link couldn't name" →
+    mark a seat given (QR gone, Undo shown, print button drops to 11). No console
+    errors.
+
 ## Next
 
-- Nothing queued. P0–P7 are done and the branch is a working app on both journeys.
+- Nothing queued. P0–P8 are done and the branch is a working app on both journeys.
   What comes after is in `ROADMAP.md` under "Later" — design system, native build,
   backend — and none of it starts without a decision to start it.
 
@@ -269,9 +309,12 @@ State, not rules. Read with `PRD.md` (spec), `ROADMAP.md` (plan) and `CLAUDE.md`
   so a pattern drawn there would be unsatisfiable on some tickets.
 - **Points are out of 100** so they read directly as a percentage of whatever was
   pooled physically. The app shows points only, never money.
-- **D1 (resolved, PRD §12):** QR links carry the full room config; a typed room code
-  carries the seed plus preset conditions and their points. Custom conditions travel by
-  QR only, and the setup screen says so.
+- **D1 (resolved, PRD §12; widened in P8):** QR links carry the full room config; a typed
+  room code carries the seed, the preset conditions and their points, and any "Another"
+  copy of a preset. What a code cannot carry is a NAME THE CONDUCTOR TYPED — that is the
+  whole of the restriction, so a hand-drawn pattern stays QR-only while a generated
+  "Full House 2" travels. Both conductor screens name what won't travel, and the player's
+  screen reports the leftover points (100 minus what arrived) so the list still adds up.
 - **Room code layout (P1, revised in P6):** 5 characters of seed (fixed width, 25 bits —
   which is what lets the two halves be split by position, so the hyphen is cosmetic),
   then a payload of a 6-bit preset mask plus 7 bits per active preset. All six presets
@@ -282,6 +325,10 @@ State, not rules. Read with `PRD.md` (spec), `ROADMAP.md` (plan) and `CLAUDE.md`
     100". A split totals 100 across every condition, not across the presets alone, so
     the derived value quietly swallowed the points of everything a code can't carry.
     One extra character buys a number that matches the conductor's ledger.
+  - P8 appended a copy list: a 1 bit before each copy (3 bits preset index, 2 bits copy
+    number, 7 bits points) and a 0 bit to end it. A room with no copies writes exactly
+    the same characters as before, because that terminating 0 sits where the padding
+    already did — so the change reissues nothing.
 - **PRESETS order is a wire format.** The room code's mask is positional, so the array in
   `patterns.ts` is append-only — reorder it and every printed code decodes a different
   game. `patterns.test.ts` pins the order.
@@ -296,9 +343,15 @@ State, not rules. Read with `PRD.md` (spec), `ROADMAP.md` (plan) and `CLAUDE.md`
 - **A seat number IS the ticket's index**, so seats run 00…N-1 and seat 04 of room K3P9Z
   is the ticket printed `K3P9Z-04`. Starting at 01 would have made the two disagree in
   the exact place people are already squinting — the conductor can type either.
-- **Code-joiners see no trace of custom conditions** (not "Custom 1/2/3" as PRD §12 first
-  sketched). A name is what makes a condition callable out loud; an unnamed row is noise.
-  The setup and distribution screens both say so plainly.
+- **Code-joiners see no trace of a condition whose name can't travel** (not "Custom
+  1/2/3" as PRD §12 first sketched). A name is what makes a condition callable out loud;
+  an unnamed row is noise. They ARE told how many points those prizes are worth (P8),
+  because that much is derivable from the split totalling 100 and costs nothing to send.
+- **A seat can only be given out once** (P8). Marking a seat given takes its QR off the
+  screen and its ticket off the print sheet, rather than leaving both there under the
+  word "Given out". The issue list has no backend behind it — it is the only thing
+  stopping one ticket reaching two people, so it has to actually stop it. Undo is the
+  single way back, and it is deliberately the smaller control of the two.
 - **QR links carry the whole room** (`#<ticketId>~<blob>`), which makes them dense — hence
   148px per code on the distribution list. Anything smaller is a QR a phone can't read.
 - **D2 (resolved):** the conductor's ledger is the source of truth; the player's prize

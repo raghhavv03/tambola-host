@@ -123,8 +123,11 @@ characters). See open decision **D1**.
   is generated on their device. This is the path that will drive app installs later.
 - Either way, the conductor's screen keeps an **issue list**: seats 01…N with a tap to
   mark "given out", so the same seat is never handed to two people. With no backend
-  this hand-off is manual by design.
-- **Print mode** — an A4 sheet, six tickets per page, ID printed on each.
+  this hand-off is manual by design. Marking a seat given **withdraws it**: its QR
+  disappears and it leaves the print sheet, so it cannot be handed out a second time by
+  any route until the conductor undoes the tick.
+- **Print mode** — an A4 sheet, six tickets per page, ID printed on each. Seats already
+  given out are left off it.
 
 ### 5.3 Running the game
 
@@ -323,14 +326,18 @@ A QR link carries the whole room config in its URL (unbounded length). A six-cha
 typed code carries only the seed. So a code-joiner's phone can build their ticket, but
 cannot know the room's custom condition names or points.
 
-- **Recommended (v1), built in P1:** the code carries the seed plus the *preset*
-  conditions and their points, packed into a slightly longer code — 5 seed characters
-  plus up to 10 of rules, e.g. `K3P9Z-1A2B3C4D5E`. Longer than first sketched, still
-  typeable; see `PROGRESS.md` for the layout and why points aren't quantised. Custom
-  conditions travel by QR only; if the conductor has defined any, the setup and
-  distribution screens say plainly that code-joiners will not see them at all — an
-  unnamed "Custom 1/2/3" row is noise, since a name is what makes a condition callable
-  out loud. Everything
+- **Recommended (v1), built in P1, widened in P8:** the code carries the seed plus the
+  *preset* conditions and their points, packed into a slightly longer code — 5 seed
+  characters plus up to 10 of rules, e.g. `K3P9Z-1A2B3C4D5E`. Longer than first
+  sketched, still typeable; see `PROGRESS.md` for the layout and why points aren't
+  quantised. It also carries any **"Another" copy** of a preset ("Full House 2"), at
+  about three characters each: the real restriction is a name the CONDUCTOR TYPED, and a
+  copy's name is generated from a preset every build already knows. A hand-drawn
+  condition still travels by QR only; when the conductor has defined one, the setup and
+  distribution screens name it and say code-joiners will not see it — an unnamed
+  "Custom 1/2/3" row is noise, since a name is what makes a condition callable out loud.
+  The code-joiner's ticket screen does say how many points sit on prizes it couldn't
+  name, which is derived from the split totalling 100 rather than carried. Everything
   else — ticket, marking, claiming, bogey — works identically on both paths.
 - **Alternative:** code-joiners see no prize list at all until the conductor reads the
   rules out. Simpler to build, worse to use.
