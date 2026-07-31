@@ -192,10 +192,19 @@ State, not rules. Read with `PRD.md` (spec), `ROADMAP.md` (plan) and `CLAUDE.md`
     `splitPoints(points, seats)` divides evenly with the remainder going to the
     lowest seat numbers. `SeatScore.won` is now `SeatWin[]` (`{ condition, points,
     sharedWith }`) so the results screen shows the share rather than the condition's
-    face value. A won condition stays selectable in the verifier — a tie is ruled
-    *after* the first winner is recorded, so removing the row would make the second
-    check impossible. Re-checking a seat that already won it says so and offers no
-    win button: a seat cannot split a prize with itself.
+    face value. Re-checking a seat that already won it says so and offers no win
+    button: a seat cannot split a prize with itself.
+  - **The tie window is one number wide** (`canTie`, added after playtesting — the
+    first cut let a condition be tied into at any point after it was won, which is
+    wrong: a tie is what happens when there was *no* first). `Ruling.atCall` already
+    recorded how many numbers were out when a ruling was made, so "same number" is
+    just that count still matching the board. A condition won on an earlier call
+    drops out of the verifier's list entirely. The window can shut *mid-claim* — a
+    draw between checking a ticket and ruling on it — so `ClaimVerifier` reads tie
+    eligibility live from props rather than freezing it into `pending`, hides the tie
+    button, and says which call it was won on instead of silently greying out.
+    `parseRulings` enforces the same invariant on load: all of a condition's valid
+    rulings must share an `atCall`, or the record was hand-edited and is discarded.
   - **"Another"** on each active preset row mints `fullHouse-2` / "Full House 2" with
     its own points. No engine change: that id isn't a preset id, so every existing
     path already treats it as a custom condition — QR-only, skipped by
@@ -220,19 +229,32 @@ State, not rules. Read with `PRD.md` (spec), `ROADMAP.md` (plan) and `CLAUDE.md`
     reload (tie survives) → join by typed code: presets only, Full House reads 25.
     No console errors.
 
+- **P7 the player's side of a split** (branch `major-changes`) — closes the gap P6
+  left open.
+  - `player/claims.ts`: a claim is now `{ state, winners }`, not a bare state string.
+    `loadClaims` still reads the old bare string, as `winners: 1` — that is exactly
+    what it meant — so a player whose phone updates mid-game keeps their notes rather
+    than losing them. A stored winner count outside 1..8 is clamped, not trusted.
+  - **The share is a range, not a figure.** This phone knows how many ways a prize
+    went (the player heard it) but not WHICH seats, and the odd point on an uneven
+    split follows seat order — so `formatShare` gives "17–18 pts" where it can't
+    divide and "15 pts" where it can. `pointsWon` returns `{ low, high }` for the
+    same reason. Guessing a single number would be wrong about half the time, and the
+    conductor's results screen is the ledger anyway (D2).
+  - `player/PrizeList` — a won row carries "Shared — N ways" (a `.field` select, no
+    third button look) and the range; the explanation appears only once a range is
+    actually on screen. `withClaim` gained an optional `winners` so recording a state
+    and changing the split are separate edits that don't clobber each other.
+  - Caught while wiring it: `TicketScreen`'s prop type and `PlayerApp.setClaim` both
+    took two arguments, so the new third one would have been **silently dropped** —
+    TypeScript accepts a narrower function where a wider one is expected, so nothing
+    failed to compile. Both widened.
+
 ## Next
 
-- Nothing queued. P0–P6 are done and the branch is a working app on both journeys.
+- Nothing queued. P0–P7 are done and the branch is a working app on both journeys.
   What comes after is in `ROADMAP.md` under "Later" — design system, native build,
   backend — and none of it starts without a decision to start it.
-
-- **Known gap, deliberately not closed in P6:** the player's own prize list
-  (`player/PrizeList`) shows a condition's full points when they self-record a win,
-  so a player who tied reads 10 where the conductor's ledger says 4. Closing it means
-  asking the player how many people shared, which is a real addition to `ClaimPanel`
-  for a number that D2 already says is a convenience copy — the conductor's results
-  screen is the source of truth and is what gets read out. Worth doing if it actually
-  annoys anyone.
 
 ## Key decisions (don't relitigate)
 
@@ -299,3 +321,13 @@ State, not rules. Read with `PRD.md` (spec), `ROADMAP.md` (plan) and `CLAUDE.md`
 - **A tie's remainder goes to the lowest seat numbers** (P6). Something has to break the
   last point, and seat order is the one tiebreak that is fixed before the game starts and
   visible to everyone, so nobody can argue it was decided after the fact.
+- **A tie only counts on the number it was won on** (P6, revised after playtesting). A
+  tie is what happens when there was NO first — both shouted on the same call. One
+  number later there was a first, and the slower player simply lost the race, which is
+  how a tambola prize is normally decided. So the window is one call wide, it is not a
+  setting, and `canTie` is checked live rather than at claim-check time because a draw
+  can shut it mid-claim.
+- **The player's phone shows a share as a range** (P7). It knows how many ways a prize
+  went, never which seats, and the odd point follows seat order — so "3–4 pts" is the
+  true answer and a single figure would be a guess. Same D2 reasoning as the rest of the
+  player's notebook: the conductor's ledger is what settles it.

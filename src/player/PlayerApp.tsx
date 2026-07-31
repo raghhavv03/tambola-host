@@ -189,10 +189,13 @@ export function PlayerApp({ path }: { path: string }) {
     })
   }
 
-  function setClaim(conditionId: string, state: ClaimState | null) {
+  // `winners` is how many ways a tied prize went (PRD.md §7.5); left out, withClaim
+  // keeps whatever this condition already had, so recording a state and changing the
+  // split are separate edits.
+  function setClaim(conditionId: string, state: ClaimState | null, winners?: number) {
     setSession((previous) => ({
       ...previous,
-      claims: withClaim(previous.claims, conditionId, state),
+      claims: withClaim(previous.claims, conditionId, state, winners),
     }))
   }
 

@@ -16,7 +16,7 @@ import type { RoomConfig } from '../engine/room'
 import { completionCall, verifyClaim, type ClaimResult } from '../engine/ticket'
 import { parseTicketId, ticketFromRef } from '../engine/ticketId'
 import { formatSeat, ticketCount } from './room'
-import { hasBogeyed, splitPoints, winnersOf, type Ruling } from './game'
+import { canTie, hasBogeyed, splitPoints, winnersOf, type Ruling } from './game'
 
 interface ClaimVerifierProps {
   config: RoomConfig
@@ -26,16 +26,18 @@ interface ClaimVerifierProps {
   onRule: (ruling: Omit<Ruling, 'atCall'>) => void
 }
 
-/** A claim that has been checked but not yet ruled on. */
+/**
+ * A claim that has been checked but not yet ruled on.
+ *
+ * Deliberately holds only what was true AT THE MOMENT OF CHECKING. Whether the
+ * condition can still be tied into depends on whether a number has been drawn since,
+ * so that is read live from props rather than frozen in here — a card left open across
+ * a draw must stop offering a tie, not go on offering a stale one.
+ */
 interface PendingClaim {
   seat: number
   condition: Condition
   result: ClaimResult
-  /**
-   * Seats that have already won this condition. Non-empty means recording this claim
-   * makes it a tie and splits the points (PRD.md §7.5).
-   */
-  existingWinners: number[]
   /**
    * Which call the pattern first completed on, or null if it still hasn't. Only shown
    * when the room plays the strict-timing house rule (PRD.md §7.4).
@@ -89,15 +91,20 @@ export function ClaimVerifier({ config, history, rulings, onRule }: ClaimVerifie
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState<PendingClaim | null>(null)
 
-  // Won conditions stay in the list rather than disappearing, because a tie is ruled
-  // AFTER the first winner is already recorded — two people shout at once, the
-  // conductor checks one, then the other. Removing the row would make the second
-  // check impossible (PRD.md §7.5).
-  const choices = config.conditions.map((condition) => ({
-    condition,
-    winners: winnersOf(rulings, condition.id),
-  }))
-  const allWon = choices.every((choice) => choice.winners.length > 0)
+  // Open conditions, plus any won on the number currently on the board — a tie is
+  // ruled AFTER the first winner is recorded (two people shout at once, the conductor
+  // checks one and then the other), so that row has to stay reachable for exactly as
+  // long as the tie window is open. A condition won on an earlier number is gone from
+  // the list for good (PRD.md §7.5).
+  const choices = config.conditions
+    .map((condition) => ({
+      condition,
+      winners: winnersOf(rulings, condition.id),
+      tieable: canTie(rulings, condition.id, history.length),
+    }))
+    .filter((choice) => choice.winners.length === 0 || choice.tieable)
+
+  const nothingLeft = choices.length === 0
 
   function reset() {
     setSeatText('')
@@ -110,7 +117,7 @@ export function ClaimVerifier({ config, history, rulings, onRule }: ClaimVerifie
     event.preventDefault()
     setPending(null)
 
-    const condition = config.conditions.find((c) => c.id === conditionId)
+    const condition = choices.find((c) => c.condition.id === conditionId)?.condition
     if (condition === undefined) {
       setError('Pick the condition being claimed.')
       return
@@ -130,7 +137,6 @@ export function ClaimVerifier({ config, history, rulings, onRule }: ClaimVerifie
       seat: resolved.seat,
       condition,
       result: verifyClaim(ticket, history, condition.pattern),
-      existingWinners: winnersOf(rulings, condition.id),
       // Cheap enough to always compute; only shown when the room plays the rule.
       completedAt: completionCall(ticket, history, condition.pattern),
     })
@@ -138,6 +144,9 @@ export function ClaimVerifier({ config, history, rulings, onRule }: ClaimVerifie
 
   function handleRule(valid: boolean) {
     if (pending === null) return
+    // Structural half of the tie window: the button is already hidden once the window
+    // shuts, and this makes sure a stale tap can't slip a second winner past it.
+    if (valid && (closed || alreadyWon)) return
     onRule({ conditionId: pending.condition.id, seat: pending.seat, valid })
     reset()
   }
@@ -146,10 +155,16 @@ export function ClaimVerifier({ config, history, rulings, onRule }: ClaimVerifie
   // (PRD.md §7.3), even if the ticket now genuinely satisfies it.
   const ineligible =
     pending !== null && hasBogeyed(rulings, pending.condition.id, pending.seat)
+
+  // Read live, not from `pending`: a draw between checking and ruling shuts the tie
+  // window, and the buttons have to follow the board rather than the snapshot.
+  const winners = pending === null ? [] : winnersOf(rulings, pending.condition.id)
+  const tieOpen = pending !== null && canTie(rulings, pending.condition.id, history.length)
   // Recording the same seat twice against one condition would be a double-tap, not a
   // tie — a seat cannot split a prize with itself.
-  const alreadyWon = pending !== null && pending.existingWinners.includes(pending.seat)
-  const wouldTie = pending !== null && pending.existingWinners.length > 0 && !alreadyWon
+  const alreadyWon = pending !== null && winners.includes(pending.seat)
+  const closed = winners.length > 0 && !tieOpen
+  const wouldTie = winners.length > 0 && tieOpen && !alreadyWon
   // Late: the ticket was already complete some numbers before the conductor checked it.
   const late =
     pending !== null &&
@@ -160,10 +175,8 @@ export function ClaimVerifier({ config, history, rulings, onRule }: ClaimVerifie
     <section className="stack">
       <h2 className="subtitle">Check a claim</h2>
 
-      {allWon && (
-        <p className="muted">
-          Every condition has been won. You can still check one to rule a tie.
-        </p>
+      {nothingLeft && (
+        <p className="muted">Every condition has been won. Nothing left to check.</p>
       )}
 
       <form className="stack" onSubmit={handleCheck}>
@@ -194,11 +207,13 @@ export function ClaimVerifier({ config, history, rulings, onRule }: ClaimVerifie
             onChange={(event) => setConditionId(event.target.value)}
           >
             <option value="">Pick a condition…</option>
-            {choices.map(({ condition, winners }) => (
-              <option key={condition.id} value={condition.id}>
-                {condition.name} — {condition.points} pts
-                {winners.length > 0 &&
-                  ` · won by ${winners.map((s) => `seat ${formatSeat(s)}`).join(' + ')}`}
+            {choices.map((choice) => (
+              <option key={choice.condition.id} value={choice.condition.id}>
+                {choice.condition.name} — {choice.condition.points} pts
+                {choice.winners.length > 0 &&
+                  ` · tie open with ${choice.winners
+                    .map((s) => `seat ${formatSeat(s)}`)
+                    .join(' + ')}`}
               </option>
             ))}
           </select>
@@ -260,22 +275,30 @@ export function ClaimVerifier({ config, history, rulings, onRule }: ClaimVerifie
             </p>
           )}
 
+          {/* A number came out between the check and the ruling, so the tie window
+              shut mid-claim (PRD.md §7.5). Say which, rather than just greying out. */}
+          {closed && !alreadyWon && (
+            <p className="muted">
+              {pending.condition.name} was won on call {rulings.find(
+                (r) => r.conditionId === pending.condition.id && r.valid,
+              )?.atCall}{' '}
+              by {winners.map((s) => `seat ${formatSeat(s)}`).join(' + ')}. A tie only
+              counts on the number it was won on, and that number has gone.
+            </p>
+          )}
+
           {wouldTie && pending.result.valid && (
             <p className="muted">
-              Recording this ties {pending.condition.name} and splits its{' '}
-              {pending.condition.points} points:{' '}
-              {describeSplit(pending.condition, [
-                ...pending.existingWinners,
-                pending.seat,
-              ])}
-              .
+              Both shouted on this number, so recording this ties{' '}
+              {pending.condition.name} and splits its {pending.condition.points} points:{' '}
+              {describeSplit(pending.condition, [...winners, pending.seat])}.
             </p>
           )}
 
           {/* The app never rules by itself: it says what it found, the conductor
               decides out loud, and only then is anything recorded. */}
           <div className="flex flex-wrap gap-2">
-            {pending.result.valid && !ineligible && !alreadyWon && (
+            {pending.result.valid && !ineligible && !alreadyWon && !closed && (
               <button type="button" className="btn" onClick={() => handleRule(true)}>
                 {wouldTie ? 'Record as a tie' : 'Record the win'}
               </button>

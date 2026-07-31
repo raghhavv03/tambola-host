@@ -170,7 +170,8 @@ characters). See open decision **D1**.
   point.
 - **Prizes** — a section listing what this ticket has won: e.g. "Top Line — 15 pts",
   and bogeys as "Full House — bogey, not eligible". Running points total for the
-  ticket.
+  ticket. A prize the conductor ruled a tie carries "how many ways" and shows the
+  share as a range — see §7.5.
 - Multiple tickets on one phone are switchable.
 
 ---
@@ -228,20 +229,34 @@ at setup, default **off**.
 
 ### 7.5 Split wins (genuine ties)
 
-If two or more players shout the same condition at effectively the same moment and
-the conductor cannot honestly say who was first, that condition's points split
-evenly between every claimant ruled valid in that moment, instead of the first one
-taking all of it.
+If two or more players shout the same condition **on the same called number** and the
+conductor cannot say who was first, that condition's points split evenly between
+every claimant ruled valid on that number, instead of the first one taking all of it.
 
-- Not a "how many winners does this condition have" setting configured up front —
-  it's an explicit action the conductor takes when checking a claim: "tie this with
-  seat 07" instead of "first valid claim wins." Only a condition that's still open
-  can be tied into; the app will not reopen an already-closed one.
-- Points split evenly; a remainder that doesn't divide cleanly (15 points, 2
-  winners) needs a rule. Proposed: the extra point goes to the lower seat number,
-  shown plainly on the results screen so nobody does the maths by hand.
+**The tie window is one number wide.** A tie is what happens when there was no first —
+both shouted on the same call. Once the next number is out, that moment has passed:
+whoever holds the condition holds it, and a player who notices one number later has
+lost the race, which is the ordinary way a tambola prize is decided. So a condition
+won on call 41 can be tied into while the board still reads 41, and never again. This
+is not a setting.
+
+- Not a "how many winners does this condition have" number configured up front —
+  it's an explicit action the conductor takes while the window is open: "record as a
+  tie" instead of "record the win". A condition won on an earlier number does not
+  appear in the verifier's list at all, and the app will not reopen it.
+- The window shuts mid-claim if a number is drawn between checking a ticket and
+  ruling on it. The verifier says so rather than silently greying out.
+- Points split evenly; the remainder that doesn't divide cleanly (15 points, 2
+  winners) goes to the **lower seat number**. Seat order is the one tiebreak fixed
+  before the game starts and visible to everyone, so it can't look decided after the
+  fact. Each share is shown, so nobody does the arithmetic by hand.
 - The results screen and per-seat scoreboard show a split explicitly — e.g. "Full
-  House — tied with seat 07, 20 pts each."
+  House — 18 pts · tied with seat 07."
+- **On the player's own phone** (§6, decision D2) the player records how many ways a
+  prize went — the one thing about a tie they actually heard. They did not hear the
+  other winners' seat numbers, and the odd point follows seat order, so their screen
+  shows a range ("3–4 pts") rather than guessing a figure that would be wrong about
+  half the time. The conductor's results screen remains the ledger.
 
 ---
 

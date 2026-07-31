@@ -98,6 +98,18 @@ ends with a working app.
 - Tests: `completionCall` (on time / late / pattern never satisfied), a split-points
   round trip through `seatScores` including the remainder case.
 
+## P7 — The player's side of a split (PRD.md §7.5)
+
+- `player/claims.ts`: a claim record becomes `{ state, winners }` instead of a bare
+  state string, with `loadClaims` reading the old bare string as `winners: 1` so a
+  player mid-game keeps their notes. `shareLow` / `shareHigh` / `formatShare`, and
+  `pointsWon` returning a `{ low, high }` range.
+- `player/PrizeList`: a won row carries a "Shared — N ways" select and shows the
+  share ("3–4 pts"), with the range explained only once a range is on screen. The
+  phone knows how many ways, never which seats, so it never guesses the odd point.
+- Tests: the record round-trip, the legacy bare-string read, winner-count clamping,
+  and the share range including the case that divides evenly.
+
 ## Later (not this iteration)
 
 Design system and animation · theme packs · native app build · accounts and social

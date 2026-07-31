@@ -24,7 +24,7 @@ interface TicketScreenProps {
   /** Every ticket this phone has opened, so a player can hold more than one. */
   wallet: WalletTicket[]
   onToggleMark: (value: number) => void
-  onSetClaim: (conditionId: string, state: ClaimState | null) => void
+  onSetClaim: (conditionId: string, state: ClaimState | null, winners?: number) => void
   onForget: () => void
   /** True while the "remove this ticket" confirmation is showing. */
   confirmingForget: boolean

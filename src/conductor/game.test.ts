@@ -12,6 +12,7 @@ import {
   latestCall,
   loadGame,
   newGame,
+  canTie,
   isOpen,
   openConditions,
   parseStoredGame,
@@ -200,6 +201,44 @@ describe('splitting a tied condition', () => {
     expect(scores[1].points).toBe(17)
     expect(scores[0].won[0].sharedWith).toEqual([5])
     expect(scores[1].won[0].sharedWith).toEqual([2])
+  })
+
+  it('is only open on the number the condition was won on', () => {
+    // ruling() records atCall 10, i.e. it was won on the 10th number.
+    const rulings = [ruling('topLine', 3, true)]
+
+    expect(canTie(rulings, 'topLine', 10)).toBe(true)
+    // One more number out and the moment has passed — whoever holds it, holds it.
+    expect(canTie(rulings, 'topLine', 11)).toBe(false)
+  })
+
+  it('is not open on a condition nobody has won — that one is simply still open', () => {
+    expect(canTie([], 'topLine', 10)).toBe(false)
+    expect(canTie([ruling('topLine', 3, false)], 'topLine', 10)).toBe(false)
+  })
+
+  it('stays open for a third claimant on the same number', () => {
+    const rulings = [ruling('topLine', 3, true), ruling('topLine', 5, true)]
+    expect(canTie(rulings, 'topLine', 10)).toBe(true)
+    expect(canTie(rulings, 'topLine', 12)).toBe(false)
+  })
+
+  it('refuses to load a game whose winners were ruled on different numbers', () => {
+    // A tie means one number (PRD.md §7.5), so this record was hand-edited.
+    const game = gameAfter(20, [
+      { conditionId: 'topLine', seat: 1, valid: true, atCall: 10 },
+      { conditionId: 'topLine', seat: 2, valid: true, atCall: 14 },
+    ])
+    expect(parseStoredGame({ ...game, version: 1 }, CONFIG)).toBeNull()
+  })
+
+  it('loads a genuine tie, and bogeys on other numbers do not disturb it', () => {
+    const game = gameAfter(20, [
+      { conditionId: 'topLine', seat: 1, valid: true, atCall: 10 },
+      { conditionId: 'topLine', seat: 2, valid: true, atCall: 10 },
+      { conditionId: 'topLine', seat: 4, valid: false, atCall: 17 },
+    ])
+    expect(parseStoredGame({ ...game, version: 1 }, CONFIG)).not.toBeNull()
   })
 
   it('counts a tied condition as won, not open', () => {

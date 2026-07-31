@@ -22,7 +22,7 @@ export function ClaimPanel({ conditions, claims, onSetClaim }: ClaimPanelProps) 
   // Settled conditions (won or bogey) move to the prize list, so this section
   // only ever shows what is still in play for this ticket.
   const open = conditions.filter((condition) => {
-    const state = claims[condition.id]
+    const state = claims[condition.id]?.state
     return state === undefined || state === 'claimed'
   })
 
@@ -38,7 +38,7 @@ export function ClaimPanel({ conditions, claims, onSetClaim }: ClaimPanelProps) 
 
       <ul className="stack-tight">
         {open.map((condition) => {
-          const waiting = claims[condition.id] === 'claimed'
+          const waiting = claims[condition.id]?.state === 'claimed'
           return (
             <li key={condition.id} className="card stack-tight">
               <div className="flex items-baseline justify-between gap-3">

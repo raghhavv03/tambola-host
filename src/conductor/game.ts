@@ -107,6 +107,30 @@ export function isOpen(rulings: readonly Ruling[], conditionId: string): boolean
 }
 
 /**
+ * Can another seat still be added to this condition's winners?
+ *
+ * Only on the number it was won on. A tie is two people shouting at the SAME call —
+ * the conductor cannot say who was first because there was no first. Once the next
+ * number is out, that moment has passed: whoever holds the condition holds it, and a
+ * player who notices one number later has simply lost the race, which is the ordinary
+ * way a tambola prize is decided (PRD.md §7.5).
+ *
+ * `Ruling.atCall` is what makes this checkable — it already recorded how many numbers
+ * had been called when the ruling was made, so "same number" is just that count still
+ * matching the board.
+ *
+ * @param called how many numbers have been drawn right now, i.e. `history.length`.
+ */
+export function canTie(
+  rulings: readonly Ruling[],
+  conditionId: string,
+  called: number,
+): boolean {
+  const first = rulings.find((r) => r.conditionId === conditionId && r.valid)
+  return first !== undefined && first.atCall === called
+}
+
+/**
  * How a condition's points divide between the seats that won it.
  *
  * Even split, and the remainder that won't divide (15 points between 2) goes to the
@@ -295,6 +319,16 @@ function parseRulings(
       atCall: entry.atCall,
     })
   }
+
+  // A condition's winners must all have been ruled on the same call — that is what a
+  // tie IS (PRD.md §7.5), and the screens won't let you record anything else. A record
+  // that disagrees was hand-edited, so it goes the way of every other unreadable one.
+  for (const ruling of rulings) {
+    if (!ruling.valid) continue
+    const first = rulings.find((r) => r.conditionId === ruling.conditionId && r.valid)!
+    if (first.atCall !== ruling.atCall) return null
+  }
+
   return rulings
 }
 
