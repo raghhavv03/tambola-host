@@ -187,7 +187,7 @@ export function ConditionsEditor({ conditions, onChange }: ConditionsEditorProps
               />
               <button
                 type="button"
-                className="muted underline"
+                className="btn-inline"
                 onClick={() =>
                   onChange(conditions.filter((entry) => entry.id !== condition.id))
                 }

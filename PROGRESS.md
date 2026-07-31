@@ -151,11 +151,34 @@ State, not rules. Read with `PRD.md` (spec), `ROADMAP.md` (plan) and `CLAUDE.md`
     fragment (room name shows) → reload → switch tickets (marks and prizes stay with
     their own ticket) → remove a ticket → bad fragment shows the error and is not saved.
 
+- **P5 consistency pass** (branch `major-changes`).
+  - `index.css` gained `.btn-inline` — the second and last button look. Two screens had
+    each grown their own anonymous `muted underline` text button (`PrizeList`'s "Undo",
+    `ConditionsEditor`'s "Remove"); both were ~21px tall, i.e. under the 44px floor every
+    other control in the app holds to. One named class now covers both, at 44px.
+  - Type scale enforced where raw Tailwind sizes had crept in: the distribution screen's
+    room code was a hand-rolled `text-2xl font-bold` (the same 24/700 `.title` already
+    defines) and the player's ticket ID was a bare `text-sm` (the same 14px `.muted`
+    already defines). Both now name the class.
+  - "Seat NN" was `.title` on the distribution list and `.subtitle` on the results
+    screen. Now `.subtitle` in both — a row label in a list is not a page title.
+  - **Back navigation everywhere.** `/t` had none: the player's ticket screen and the
+    bad-link screen were the only two in the app with no way to the front door. Both
+    now carry the same `← Home` link the conductor and join screens already had.
+  - One grey for hairlines: `PrizeList`'s total separator was `neutral-200` against the
+    `neutral-300` every card border uses.
+  - Suite: 130 tests, lint and build clean. Walked in the browser at 375×812, both
+    journeys end to end: home → conduct → distribution (room code, QRs, issue list) →
+    edit setup → add a custom condition → points over 100 blocks Save → cancel → start
+    calling → draw → verify a claim (BOGEY with missing numbers, then VALID) → record
+    the win → end → results; and join by typed room code → ticket → call a win → record
+    it → undo it → back to home. No console errors.
+
 ## Next
 
-- **P5 consistency pass** — every screen on the same type/spacing/control scale, empty
-  and error states, back navigation everywhere, then a build + lint + browser walk of
-  both journeys end to end. See `ROADMAP.md`.
+- Nothing queued. P0–P5 are done and the branch is a working app on both journeys.
+  What comes after is in `ROADMAP.md` under "Later" — design system, native build,
+  backend — and none of it starts without a decision to start it.
 
 ## Key decisions (don't relitigate)
 

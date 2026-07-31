@@ -7,7 +7,7 @@
 
 import type { Ticket } from '../engine/ticket'
 import type { RoomConfig } from '../engine/room'
-import { JOIN_ROUTE, PLAYER_ROUTE, ticketFragment } from '../routes'
+import { HOME_ROUTE, JOIN_ROUTE, PLAYER_ROUTE, ticketFragment } from '../routes'
 import { TicketCell } from './TicketCell'
 import { ClaimPanel } from './ClaimPanel'
 import { PrizeList } from './PrizeList'
@@ -53,12 +53,17 @@ export function TicketScreen({
   return (
     <div className="screen stack">
       <header className="stack-tight">
+        {/* Every screen in the app offers the way back to the front door. Leaving
+            the ticket does not lose it: this phone remembers what it has opened. */}
+        <a href={HOME_ROUTE} className="muted">
+          ← Home
+        </a>
         {room !== null && room.name.length > 0 && (
           <span className="label">{room.name}</span>
         )}
         <div className="flex items-baseline justify-between gap-3">
           <h1 className="title">Your ticket</h1>
-          <span className="font-mono text-sm tracking-widest">{ticketId}</span>
+          <span className="muted font-mono tracking-widest">{ticketId}</span>
         </div>
       </header>
 

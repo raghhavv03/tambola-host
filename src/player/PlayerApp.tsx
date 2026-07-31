@@ -27,7 +27,13 @@
 import { useEffect, useState } from 'react'
 import { ticketFromId } from '../engine/ticketId'
 import { decodeRoomConfig, type RoomConfig } from '../engine/room'
-import { JOIN_ROUTE, ticketFragment, ticketIdFromHash, roomFromHash } from '../routes'
+import {
+  HOME_ROUTE,
+  JOIN_ROUTE,
+  ticketFragment,
+  ticketIdFromHash,
+  roomFromHash,
+} from '../routes'
 import { clearMarks, loadMarks, saveMarks } from './marks'
 import {
   clearClaims,
@@ -93,7 +99,12 @@ function openTicket(hash: string): Session {
 function BadLink({ reason }: { reason: string }) {
   return (
     <div className="screen stack">
-      <h1 className="title">Can't open this ticket</h1>
+      <header className="stack-tight">
+        <a href={HOME_ROUTE} className="muted">
+          ← Home
+        </a>
+        <h1 className="title">Can't open this ticket</h1>
+      </header>
       <p className="muted">{reason}</p>
       <a href={JOIN_ROUTE} className="btn btn-secondary btn-block">
         Enter a room code instead

@@ -75,7 +75,7 @@ export function DistributionScreen({
     <div className="stack">
       <section className="card stack-tight">
         <span className="label">Room code</span>
-        <p className="font-mono text-2xl font-bold tracking-widest break-all">
+        <p className="title font-mono tracking-widest break-all">
           {formatRoomCode(config)}
         </p>
         <p className="muted">
@@ -125,7 +125,7 @@ export function DistributionScreen({
                   className="shrink-0"
                 />
                 <div className="stack-tight min-w-0 flex-1">
-                  <span className="title tabular-nums">Seat {formatSeat(seat)}</span>
+                  <span className="subtitle tabular-nums">Seat {formatSeat(seat)}</span>
                   <span className="muted font-mono break-all">{entry.id}</span>
                   <span className="muted">
                     Player {playerOfSeat(seat, config.ticketsPerPlayer)}

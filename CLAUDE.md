@@ -94,10 +94,15 @@ server — the room code IS the seed.
 ## UI rules for this iteration
 
 - `src/index.css` holds the whole system: one font stack, four type sizes (`.title`,
-  `.subtitle`, `.label`, `.muted`), one control height (44px — `.btn`, `.field`), one
-  container (`.screen`), one surface (`.card`). `.callout` is the single exception, and
-  only the caller screen's just-called number may use it — it is read from across a room.
-- Use those classes. Don't invent a fifth type size or a second button look.
+  `.subtitle`, `.label`, `.muted`), one control height (44px — `.btn`, `.field`,
+  `.btn-inline`), one container (`.screen`), one surface (`.card`). `.callout` is the
+  single exception, and only the caller screen's just-called number may use it — it is
+  read from across a room.
+- Two button looks, and only two: `.btn` (a box, optionally `.btn-secondary` /
+  `.btn-block`) and `.btn-inline` (an underlined action that lives inside a list row,
+  where a box would be bigger than the row it edits — "Undo", "Remove"). Both are 44px
+  tall. A third one is a bug.
+- Use those classes. Don't invent a fifth type size or a third button look.
 - Only two colours mean anything: `.is-valid` (green) and `.is-bogey` (red). Everything
   else is black, white or grey.
 - Mobile-first. The conductor is holding a phone and so is every player.

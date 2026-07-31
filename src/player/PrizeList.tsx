@@ -47,7 +47,7 @@ export function PrizeList({ conditions, claims, onSetClaim }: PrizeListProps) {
                   {won && <span className="tabular-nums">{condition.points} pts</span>}
                   <button
                     type="button"
-                    className="muted underline"
+                    className="btn-inline"
                     onClick={() => onSetClaim(condition.id, null)}
                   >
                     Undo
@@ -57,7 +57,7 @@ export function PrizeList({ conditions, claims, onSetClaim }: PrizeListProps) {
             )
           })}
 
-          <li className="flex items-baseline justify-between gap-3 border-t border-neutral-200 pt-2">
+          <li className="flex items-baseline justify-between gap-3 border-t border-neutral-300 pt-2">
             <span className="subtitle">Total</span>
             <span className="subtitle tabular-nums">{total} pts</span>
           </li>

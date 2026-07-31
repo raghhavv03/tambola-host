@@ -155,6 +155,25 @@
     width: 100%;
   }
 
+  /* The one control that isn't a box: a small "undo this row" action that lives
+     INSIDE a list item, where a full .btn would be bigger than the row it edits.
+     It is still 44px tall — the padding does the work the border would — so the
+     touch target rule holds. This exists so those actions have one look instead
+     of each screen inventing its own underlined span. */
+  .btn-inline {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.75rem;
+    padding: 0 0.25rem;
+    background: none;
+    border: 0;
+    font-size: 0.875rem; /* 14, same as .muted */
+    line-height: 1.5;
+    color: #525252;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+
   .field {
     width: 100%;
     min-height: 2.75rem;
