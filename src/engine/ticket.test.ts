@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  completionCall,
   generateTicket,
   generateSet,
   verifyClaim,
@@ -205,6 +206,56 @@ describe('verifyClaim', () => {
     )
     expect(verifyClaim(ticket, corners.slice(0, 2), anyTwoCorners).valid).toBe(true)
     expect(verifyClaim(ticket, corners.slice(0, 1), anyTwoCorners).valid).toBe(false)
+  })
+})
+
+describe('completionCall — when a pattern first became true', () => {
+  const ticket = generateTicket(2024)
+  const row0 = ticket[0].filter((c): c is number => c !== null)
+  // Numbers that are NOT on this ticket, to pad a call history with.
+  const elsewhere = Array.from({ length: 90 }, (_, i) => i + 1).filter(
+    (n) => !allNumbers(ticket).includes(n),
+  )
+
+  it('is null while the pattern still is not satisfied', () => {
+    expect(completionCall(ticket, row0.slice(0, 4), preset('topLine'))).toBeNull()
+    expect(completionCall(ticket, [], preset('topLine'))).toBeNull()
+  })
+
+  it('is the call the pattern completed on, not the call count', () => {
+    // Two irrelevant numbers, then the five of the top row: complete on call 7.
+    const history = [...elsewhere.slice(0, 2), ...row0]
+    expect(completionCall(ticket, history, preset('topLine'))).toBe(7)
+    expect(history.length).toBe(7)
+  })
+
+  it('stays at the completing call however many numbers come after it', () => {
+    // The same seven calls, then ten more that have nothing to do with the top row.
+    const history = [...elsewhere.slice(0, 2), ...row0, ...elsewhere.slice(2, 12)]
+    expect(completionCall(ticket, history, preset('topLine'))).toBe(7)
+    // Which is the whole point: 10 numbers have been called since, so this claim is
+    // late under the strict house rule (PRD.md §7.4) even though it verifies fine.
+    expect(verifyClaim(ticket, history, preset('topLine')).valid).toBe(true)
+    expect(history.length - 7).toBe(10)
+  })
+
+  it('counts only the numbers the pattern needs, for an any-N condition', () => {
+    // Early Five needs any 5 of the ticket, so it completes on the 5th ticket number
+    // to be called — here the 3rd, 4th, 5th, 6th and 7th calls.
+    const history = [...elsewhere.slice(0, 2), ...allNumbers(ticket)]
+    expect(completionCall(ticket, history, preset('earlyFive'))).toBe(7)
+    expect(completionCall(ticket, history, preset('fullHouse'))).toBe(17)
+  })
+
+  it('agrees with verifyClaim on every prefix of a real draw', () => {
+    const history = [...elsewhere.slice(0, 3), ...allNumbers(ticket)]
+    const at = completionCall(ticket, history, preset('corners'))
+    expect(at).not.toBeNull()
+    // Valid from that call onwards, and not before it.
+    for (let n = 0; n <= history.length; n++) {
+      const valid = verifyClaim(ticket, history.slice(0, n), preset('corners')).valid
+      expect(valid).toBe(n >= at!)
+    }
   })
 })
 

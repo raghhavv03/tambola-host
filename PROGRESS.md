@@ -174,11 +174,65 @@ State, not rules. Read with `PRD.md` (spec), `ROADMAP.md` (plan) and `CLAUDE.md`
     the win → end → results; and join by typed room code → ticket → call a win → record
     it → undo it → back to home. No console errors.
 
+- **P6 house-rule extensions** (branch `major-changes`) — from friend playtesting.
+  - `engine/ticket.ts` gained `completionCall(ticket, history, pattern)`: which call
+    the pattern FIRST became satisfied on, or null. `verifyClaim` answers "does this
+    hold now", which is all a lenient room needs; the strict house rule also needs
+    "and how long has it been holding?".
+  - `RoomConfig.strictClaimTiming` — the late-claim toggle, off by default, set under
+    a new "House rules" section on the setup screen. **Neither carrier carries it**:
+    it is a rule about how the CONDUCTOR rules, the ruling happens entirely on the
+    conductor's device, so it stays out of the room code and the QR blob and the
+    conductor announces it out loud. `parseStoredRoom` reads it tolerantly (a room
+    saved before the field existed defaults to off rather than being discarded).
+    When it is on, the verifier adds one line to a VALID result — "Late: complete
+    since call 31, 14 numbers ago" or "On time" — and nothing else. The conductor
+    still presses the button; the app reports a fact, never a verdict.
+  - **Ties.** `winnerOf` became `winnersOf` (seats, de-duplicated) plus `isOpen`;
+    `splitPoints(points, seats)` divides evenly with the remainder going to the
+    lowest seat numbers. `SeatScore.won` is now `SeatWin[]` (`{ condition, points,
+    sharedWith }`) so the results screen shows the share rather than the condition's
+    face value. A won condition stays selectable in the verifier — a tie is ruled
+    *after* the first winner is recorded, so removing the row would make the second
+    check impossible. Re-checking a seat that already won it says so and offers no
+    win button: a seat cannot split a prize with itself.
+  - **"Another"** on each active preset row mints `fullHouse-2` / "Full House 2" with
+    its own points. No engine change: that id isn't a preset id, so every existing
+    path already treats it as a custom condition — QR-only, skipped by
+    `formatRoomCode`, counted by `hasCustomConditions`. Id minting takes the highest
+    suffix in use, not the count, so removing "Full House 2" can't mint an id that
+    "Full House 3" still holds.
+  - **Bug found and fixed while walking P6** (pre-existing, but "Another" makes it one
+    tap away): the room code encoded points for every active preset *except the last*
+    and derived that one as "the rest of 100". A room's split only totals 100 across
+    ALL conditions, though — so any points sitting on a condition the code can't carry
+    were silently absorbed into the last preset, and a code-joiner read "Full House 35
+    pts" where the conductor's ledger said 25. All six are now written out explicitly
+    and the decoder accepts any total up to 100. Costs exactly one more character
+    (`CF3V9-ZH8F3RY50` → `CF3V9-ZH8F3RY534`); the old test only checked which ids
+    survived, never their points, which is why it never caught this.
+  - Suite: 146 tests, lint and build clean. Walked in the browser at 375×812: setup
+    with a second Full House and the strict rule on → 100/100 → call 45 numbers →
+    check a claim (BOGEY, no timing line since it was never complete) → check again
+    (VALID + "Late: complete since call 31, 14 numbers ago") → record → tie a second
+    seat (5/5 preview) → tie a third (4/3/3, remainder to seat 00) → re-check seat 00
+    ("already won", no win button) → results show shares and who each was tied with →
+    reload (tie survives) → join by typed code: presets only, Full House reads 25.
+    No console errors.
+
 ## Next
 
-- Nothing queued. P0–P5 are done and the branch is a working app on both journeys.
+- Nothing queued. P0–P6 are done and the branch is a working app on both journeys.
   What comes after is in `ROADMAP.md` under "Later" — design system, native build,
   backend — and none of it starts without a decision to start it.
+
+- **Known gap, deliberately not closed in P6:** the player's own prize list
+  (`player/PrizeList`) shows a condition's full points when they self-record a win,
+  so a player who tied reads 10 where the conductor's ledger says 4. Closing it means
+  asking the player how many people shared, which is a real addition to `ClaimPanel`
+  for a number that D2 already says is a convenience copy — the conductor's results
+  screen is the source of truth and is what gets read out. Worth doing if it actually
+  annoys anyone.
 
 ## Key decisions (don't relitigate)
 
@@ -196,13 +250,16 @@ State, not rules. Read with `PRD.md` (spec), `ROADMAP.md` (plan) and `CLAUDE.md`
 - **D1 (resolved, PRD §12):** QR links carry the full room config; a typed room code
   carries the seed plus preset conditions and their points. Custom conditions travel by
   QR only, and the setup screen says so.
-- **Room code layout (P1):** 5 characters of seed (fixed width, 25 bits — which is what
-  lets the two halves be split by position, so the hyphen is cosmetic), then a payload
-  of a 6-bit preset mask plus 7 bits per active preset *except the last*, whose points
-  are derived as "the rest of 100". All six presets on = 9 payload characters, i.e.
-  `K3P9Z-1A2B3C4D5`. Longer than the "8–10 characters" sketch in PRD §12; the way to get
-  it shorter was to quantise points to multiples of 5, and a real product restriction
-  isn't worth two characters.
+- **Room code layout (P1, revised in P6):** 5 characters of seed (fixed width, 25 bits —
+  which is what lets the two halves be split by position, so the hyphen is cosmetic),
+  then a payload of a 6-bit preset mask plus 7 bits per active preset. All six presets
+  on = 10 payload characters, i.e. `K3P9Z-1A2B3C4D5E`. Longer than the "8–10 characters"
+  sketch in PRD §12; the way to get it shorter was to quantise points to multiples of 5,
+  and a real product restriction isn't worth two characters.
+  - P6 dropped the original saving of deriving the LAST preset's points as "the rest of
+    100". A split totals 100 across every condition, not across the presets alone, so
+    the derived value quietly swallowed the points of everything a code can't carry.
+    One extra character buys a number that matches the conductor's ledger.
 - **PRESETS order is a wire format.** The room code's mask is positional, so the array in
   `patterns.ts` is append-only — reorder it and every printed code decodes a different
   game. `patterns.test.ts` pins the order.
@@ -232,3 +289,13 @@ State, not rules. Read with `PRD.md` (spec), `ROADMAP.md` (plan) and `CLAUDE.md`
   conductor rule, and they can undo it. It can disagree with the conductor's ledger, and
   that is the accepted price of having no channel — D2, taken on purpose.
 - `generateSet` gives distinct tickets, not the traditional book-of-6 partition of 1–90.
+- **"Two full houses" is two conditions, not one condition with two winners** (P6). Each
+  prize has its own name, its own points and its own winner — which is exactly what a
+  `Condition` already is, so "Another" needed no engine change at all. A tie is the
+  genuinely different thing: ONE prize, several winners, points divided.
+- **The strict-timing rule reports, it does not rule** (P6). The verifier says which call
+  the ticket completed on; the conductor decides what that is worth, out loud. Same
+  reason the app never announces a win — see rule 2.
+- **A tie's remainder goes to the lowest seat numbers** (P6). Something has to break the
+  last point, and seat order is the one tiebreak that is fixed before the game starts and
+  visible to everyone, so nobody can argue it was decided after the fact.

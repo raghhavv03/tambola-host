@@ -26,6 +26,7 @@ function room(overrides: Partial<RoomConfig> = {}): RoomConfig {
     playerCount: 12,
     ticketsPerPlayer: 1,
     conditions: defaultConditions(),
+    strictClaimTiming: false,
     ...overrides,
   }
 }
@@ -80,9 +81,9 @@ describe('room code', () => {
     expect(parsed!.conditions).toEqual(conditions)
   })
 
-  it('stays typeable: seed plus at most nine more characters', () => {
+  it('stays typeable: seed plus at most ten more characters', () => {
     const code = formatRoomCode(room())
-    expect(code).toMatch(/^[0-9A-Z]{5}-[0-9A-Z]{1,9}$/)
+    expect(code).toMatch(/^[0-9A-Z]{5}-[0-9A-Z]{1,10}$/)
   })
 
   it('is forgiving about case, spaces and hyphens', () => {
@@ -108,6 +109,41 @@ describe('room code', () => {
     expect(parsed!.conditions.map((c) => c.id)).toEqual(['earlyFive', 'topLine'])
   })
 
+  it('keeps every preset on the points the conductor actually gave it', () => {
+    // The presets here total 25; the other 75 sits on a condition the code cannot
+    // carry. Deriving the last preset as "the rest of 100" would report Top Line as
+    // 90 — a number the conductor's own ledger disagrees with.
+    const conditions = [
+      ...defaultConditions()
+        .slice(0, 2)
+        .map((c, i) => ({ ...c, points: i === 0 ? 10 : 15 })),
+      { ...CUSTOM, points: 75 },
+    ]
+
+    const parsed = parseRoomCode(formatRoomCode(room({ conditions })))
+    expect(parsed!.conditions.map((c) => [c.id, c.points])).toEqual([
+      ['earlyFive', 10],
+      ['topLine', 15],
+    ])
+  })
+
+  it('round-trips a second full house as a condition a code cannot carry', () => {
+    // "Another" mints `fullHouse-2`, which is not a preset id — so it is dropped by
+    // the code exactly like a hand-drawn pattern, and the presets keep their points.
+    const base = defaultConditions()
+    const fullHouse = base.find((c) => c.id === 'fullHouse')!
+    const conditions = [
+      ...base.map((c) => ({ ...c, points: c.id === 'fullHouse' ? 25 : c.points })),
+      { id: 'fullHouse-2', name: 'Full House 2', pattern: fullHouse.pattern, points: 10 },
+    ]
+    const config = room({ conditions })
+
+    expect(hasCustomConditions(config)).toBe(true)
+    const parsed = parseRoomCode(formatRoomCode(config))!
+    expect(parsed.conditions.map((c) => c.id)).not.toContain('fullHouse-2')
+    expect(parsed.conditions.find((c) => c.id === 'fullHouse')!.points).toBe(25)
+  })
+
   it('carries the seed alone when the payload is missing', () => {
     const code = formatRoomCode(room()).split('-')[0]
     const parsed = parseRoomCode(code)
@@ -121,12 +157,17 @@ describe('room code', () => {
     expect(parseRoomCode('')).toBeNull()
   })
 
-  it('rejects a payload whose points cannot add up to 100', () => {
-    // Every preset on, and the five encoded points already over 100 — the sixth
-    // would have to be negative. Better rejected than shown as a broken prize list.
+  it('rejects a payload whose points add up to more than 100', () => {
+    // Six presets at 25 is 150 — impossible in a real room, so the code was mistyped.
+    // Better rejected than shown as a broken prize list.
     const conditions = defaultConditions().map((c) => ({ ...c, points: 25 }))
     const broken = formatRoomCode(room({ conditions }))
     expect(parseRoomCode(broken)).toBeNull()
+  })
+
+  it('rejects a payload claiming a condition is worth nothing', () => {
+    const conditions = defaultConditions().map((c) => ({ ...c, points: 0 }))
+    expect(parseRoomCode(formatRoomCode(room({ conditions })))).toBeNull()
   })
 
   it('room code + seat number rebuilds the same ticket ID the conductor printed', () => {

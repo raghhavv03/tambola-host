@@ -52,6 +52,29 @@ function nextCustomId(conditions: Condition[]): string {
   return `c${Math.max(0, ...used) + 1}`
 }
 
+/**
+ * How many of a preset the room is already playing, counting the original.
+ *
+ * "Two full houses" is two conditions with the same pattern and different names, not
+ * one condition with a winner count — every prize has its own points and its own
+ * winner, which is exactly what a Condition already is. So a duplicate is just another
+ * condition whose id is `fullHouse-2`. That id isn't a preset id, so everything
+ * downstream already treats it as a custom condition: it can't ride in a typed room
+ * code (D1), and formatRoomCode skips it without needing to know it exists.
+ */
+function nextCopyNumber(conditions: Condition[], presetId: string): number {
+  const prefix = `${presetId}-`
+  // Highest number in use, not the count: removing "Full House 2" and adding another
+  // must not mint an id that "Full House 3" is still holding.
+  const used = conditions.map((condition) => {
+    if (condition.id === presetId) return 1
+    if (!condition.id.startsWith(prefix)) return 0
+    const suffix = condition.id.slice(prefix.length)
+    return /^\d+$/.test(suffix) ? Number(suffix) : 0
+  })
+  return Math.max(1, ...used) + 1
+}
+
 /** "4 of 4 positions" / "any 5 of 15 positions" — enough to recognise a rule by. */
 function describePattern(pattern: Pattern): string {
   const cells = `${pattern.cells.length} position${pattern.cells.length === 1 ? '' : 's'}`
@@ -135,6 +158,24 @@ export function ConditionsEditor({ conditions, onChange }: ConditionsEditorProps
     setAdding(false)
   }
 
+  /** A second (or third) prize for the same pattern — two full houses, two top lines. */
+  function addCopy(presetId: string) {
+    const preset = PRESETS.find((entry) => entry.id === presetId)
+    if (preset === undefined) return
+    const number = nextCopyNumber(conditions, presetId)
+    onChange([
+      ...conditions,
+      {
+        id: `${presetId}-${number}`,
+        // The name is what gets called out loud, so it has to distinguish itself from
+        // the original: "Full House" and "Full House 2".
+        name: `${preset.name} ${number}`,
+        pattern: preset.pattern,
+        points: NEW_CUSTOM_POINTS,
+      },
+    ])
+  }
+
   return (
     <section className="stack">
       <div className="stack-tight">
@@ -167,10 +208,26 @@ export function ConditionsEditor({ conditions, onChange }: ConditionsEditorProps
                 disabled={condition === undefined}
                 onChange={(points) => setPoints(preset.id, points)}
               />
+              {/* Only offered once the room is actually playing the condition —
+                  a second full house without a first one is just a full house. */}
+              {condition !== undefined && (
+                <button
+                  type="button"
+                  className="btn-inline"
+                  onClick={() => addCopy(preset.id)}
+                >
+                  Another
+                </button>
+              )}
             </div>
           )
         })}
       </div>
+
+      <p className="muted">
+        "Another" adds a second prize for the same pattern — two full houses, two top
+        lines — with its own name and its own points. It appears in the list below.
+      </p>
 
       {custom.length > 0 && (
         <div className="card stack-tight">
@@ -213,9 +270,11 @@ export function ConditionsEditor({ conditions, onChange }: ConditionsEditorProps
 
       {custom.length > 0 && (
         <p className="muted">
-          Custom conditions travel by QR code only. Players who join by typing the room
-          code will see the preset conditions and their points, and nothing about these
-          — read them out, or hand those players a QR.
+          The conditions above travel by QR code only — a typed room code carries the
+          six presets and nothing else, so that is true of a second full house just as
+          much as of a pattern you drew yourself. Players who join by code will see the
+          presets and their points and nothing about these; read them out, or hand
+          those players a QR.
         </p>
       )}
 

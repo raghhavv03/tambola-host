@@ -6,7 +6,7 @@
 
 import type { RoomConfig } from '../engine/room'
 import { formatSeat } from './room'
-import { seatScores, winnerOf, type StoredGame } from './game'
+import { isOpen, seatScores, type StoredGame } from './game'
 
 interface ResultsScreenProps {
   config: RoomConfig
@@ -19,7 +19,7 @@ interface ResultsScreenProps {
 
 export function ResultsScreen({ config, game, onResume, onPlayAgain }: ResultsScreenProps) {
   const scores = seatScores(config, game.rulings)
-  const unclaimed = config.conditions.filter((c) => winnerOf(game.rulings, c.id) === null)
+  const unclaimed = config.conditions.filter((c) => isOpen(game.rulings, c.id))
 
   return (
     <div className="stack">
@@ -40,8 +40,21 @@ export function ResultsScreen({ config, game, onResume, onPlayAgain }: ResultsSc
                 <span className="subtitle tabular-nums">Seat {formatSeat(score.seat)}</span>
                 <span className="title tabular-nums">{score.points} pts</span>
               </div>
+              {/* One row each, with the share rather than the condition's face value:
+                  a tied Full House is 18 points to this seat, not 35, and the results
+                  screen is what gets read out at the end of the night. */}
               {score.won.length > 0 && (
-                <p className="muted">{score.won.map((c) => c.name).join(', ')}</p>
+                <ul className="stack-tight">
+                  {score.won.map((win) => (
+                    <li key={win.condition.id} className="muted tabular-nums">
+                      {win.condition.name} — {win.points} pts
+                      {win.sharedWith.length > 0 &&
+                        ` · tied with ${win.sharedWith
+                          .map((seat) => `seat ${formatSeat(seat)}`)
+                          .join(', ')}`}
+                    </li>
+                  ))}
+                </ul>
               )}
               {score.bogeys > 0 && (
                 <p className="muted is-bogey">

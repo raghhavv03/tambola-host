@@ -46,6 +46,19 @@ export interface RoomConfig {
   ticketsPerPlayer: number
   /** What the room is playing for, and the points split. Must total 100 to start. */
   conditions: Condition[]
+  /**
+   * The strict-timing house rule (PRD.md §7.4): a claim whose pattern was already
+   * complete several numbers ago counts as late, and the conductor may rule it a
+   * bogey even though the ticket is mechanically valid. Off by default — plenty of
+   * rooms play it lenient, and this is a house rule rather than universal law.
+   *
+   * NEITHER CARRIER CARRIES THIS, on purpose. It is a rule about how the conductor
+   * RULES, and the ruling happens entirely on the conductor's device; a player's
+   * phone would only ever display it. So it stays out of the room code and out of the
+   * QR blob, `decodeRoomConfig` reads it back as false, and the conductor announces
+   * the house rule out loud the way they announce every other one.
+   */
+  strictClaimTiming: boolean
 }
 
 // --- The seed ------------------------------------------------------------------
@@ -135,13 +148,23 @@ function bitReader(bits: number[]) {
 // legibility ("K3P9Z-7QW3"). The payload is:
 //
 //   6 bits  one per preset, in PRESETS order, set when the room plays that condition
-//   7 bits  points for each active preset EXCEPT THE LAST — that one is whatever is
-//           left of 100, because the split is required to total exactly 100 anyway.
+//   7 bits  points for EACH active preset, including the last one
 //
-// So a six-preset room is 6 + 35 = 41 bits = 9 payload characters; a three-condition
-// room is 4. Longer than the "8-10 characters" sketch in PRD.md §12 when all six are
+// So a six-preset room is 6 + 42 = 48 bits = 10 payload characters; a three-condition
+// room is 6. Longer than the "8-10 characters" sketch in PRD.md §12 when all six are
 // on — the alternative was quantising points to multiples of 5, which is a real
 // product restriction traded for two characters. Not worth it.
+//
+// --- Why the last one is not derived --------------------------------------------
+//
+// The obvious saving is to leave the last preset's points out and compute them as
+// "the rest of 100", since a room's split has to total exactly 100 to start. That is
+// only true of the WHOLE split, though — and a room code carries the presets alone.
+// Put 10 points on anything a code can't carry (a custom pattern, a second full
+// house) and the presets no longer total 100, so the derived value silently absorbs
+// every missing condition's points: the conductor's ledger says Full House is 25 and
+// the code-joiner's phone says 35. A wrong number is worse than a long code, so all
+// six are written out and the decoder accepts any total up to 100.
 
 const PRESET_BITS = PRESETS.length // 6
 const POINTS_BITS = 7 // 0..100 fits in 7 bits
@@ -167,8 +190,7 @@ export function formatRoomCode(config: RoomConfig): string {
 
   const bits: number[] = []
   for (const condition of active) writeBits(bits, condition ? 1 : 0, 1)
-  // Every active condition but the last: the last is derived as "the rest of 100".
-  for (const condition of activeConditions.slice(0, -1)) {
+  for (const condition of activeConditions) {
     writeBits(bits, Math.max(0, Math.min(TOTAL_POINTS, condition.points)), POINTS_BITS)
   }
 
@@ -219,17 +241,19 @@ function decodePresetPayload(payload: string): Condition[] | null {
   if (active.length === 0) return null
 
   const points: number[] = []
-  for (let i = 0; i < active.length - 1; i++) {
+  for (let i = 0; i < active.length; i++) {
     const value = reader.read(POINTS_BITS)
     if (value === null) return null
+    // Every condition is worth something (pointsProblem enforces it at setup), so a
+    // zero here means a mistyped character rather than a real prize.
+    if (value < 1 || value > TOTAL_POINTS) return null
     points.push(value)
   }
 
-  // The last condition takes whatever is left of 100. If that lands outside 1..100 the
-  // code was mistyped — better to reject than to show a room with -12 points on it.
-  const last = TOTAL_POINTS - points.reduce((sum, p) => sum + p, 0)
-  if (last < 1 || last > TOTAL_POINTS) return null
-  points.push(last)
+  // At most 100 between them, not exactly 100: the rest may be sitting on conditions
+  // this code cannot carry. Over 100 is impossible in a real room, so it was mistyped
+  // — better rejected than shown as a broken prize list.
+  if (points.reduce((sum, p) => sum + p, 0) > TOTAL_POINTS) return null
 
   // Anything after the fields we read must be zero padding, and there must be less
   // than a whole character of it — otherwise this isn't the payload we wrote.
@@ -350,5 +374,9 @@ export function decodeRoomConfig(encoded: string): RoomConfig | null {
     })
   }
 
-  return { name, seed, playerCount, ticketsPerPlayer, conditions }
+  // strictClaimTiming is deliberately not in the blob — see the field's note in
+  // RoomConfig. A decoded room is a player's copy, and a player never rules on
+  // anything, so false is not a guess here: it is the only value that means anything
+  // on this side of the airgap.
+  return { name, seed, playerCount, ticketsPerPlayer, conditions, strictClaimTiming: false }
 }

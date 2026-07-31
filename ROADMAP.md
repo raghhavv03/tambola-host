@@ -76,8 +76,30 @@ ends with a working app.
 - Empty states, error states, back navigation everywhere
 - Build + lint + browser walk-through of both journeys end to end
 
+## P6 — House-rule extensions (from friend playtesting, PRD.md §7.3–7.5)
+
+- **Late-claim house rule.** New pure `completionCall(ticket, history, pattern)` —
+  the call count at which a pattern first became satisfied, versus `Ruling.atCall`
+  (already recorded) which is when it was actually ruled. A per-room toggle in
+  `RoomConfig` (`strictClaimTiming`, default false). `ClaimVerifier` shows "completed
+  at call N" against the current call count when the toggle is on; the conductor
+  still rules — the app surfaces the fact, not the verdict.
+- **Tie rulings (split points).** `winnerOf` / `openConditions` / `seatScores` in
+  `conductor/game.ts` currently assume "first valid ruling per condition wins" —
+  needs to become "however many valid rulings a condition has, divide its points
+  evenly across them." `ClaimVerifier` gains an explicit "tie with seat NN" path,
+  offered only against a condition that's still open. Remainder-on-split rule:
+  extra point to the lower seat number. `ResultsScreen` shows splits by name.
+- **"Add another" on a preset.** `ConditionsEditor` lets a preset be added a second
+  time (auto-suffixed id, e.g. `fullHouse-2`) instead of requiring a hand-drawn
+  duplicate in `PatternEditor`. No engine change — a duplicate is a non-preset id
+  the moment it's added, so it already rides QR-only same as any custom condition
+  (D1, unchanged). This alone already covers "two Full Houses" today, just clunkily.
+- Tests: `completionCall` (on time / late / pattern never satisfied), a split-points
+  round trip through `seatScores` including the remainder case.
+
 ## Later (not this iteration)
 
 Design system and animation · theme packs · native app build · accounts and social
 login · backend (fixes the code-vs-QR rule-sharing gap, enables live sync and rooms that
-outlive one device) · split prizes · cross-game stats.
+outlive one device) · cross-game stats.

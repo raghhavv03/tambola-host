@@ -47,6 +47,9 @@ export function SetupScreen({ initial, onSave, onCancel }: SetupScreenProps) {
   const [conditions, setConditions] = useState<Condition[]>(
     initial?.conditions ?? defaultConditions(),
   )
+  const [strictClaimTiming, setStrictClaimTiming] = useState(
+    initial?.strictClaimTiming ?? false,
+  )
 
   const playerCount = parseCount(playerCountText)
   const ticketsPerPlayer = parseCount(ticketsText)
@@ -84,6 +87,7 @@ export function SetupScreen({ initial, onSave, onCancel }: SetupScreenProps) {
       playerCount: playerCount!,
       ticketsPerPlayer: ticketsPerPlayer!,
       conditions,
+      strictClaimTiming,
     })
   }
 
@@ -171,6 +175,30 @@ export function SetupScreen({ initial, onSave, onCancel }: SetupScreenProps) {
       </div>
 
       <ConditionsEditor conditions={conditions} onChange={setConditions} />
+
+      <section className="stack-tight">
+        <h2 className="subtitle">House rules</h2>
+        <div className="card stack-tight">
+          <div className="flex min-h-11 items-center gap-3">
+            <input
+              id="strict-claim-timing"
+              type="checkbox"
+              className="size-5 shrink-0 accent-black"
+              checked={strictClaimTiming}
+              onChange={(event) => setStrictClaimTiming(event.target.checked)}
+            />
+            <label htmlFor="strict-claim-timing" className="flex-1">
+              Late claims are bogeys
+            </label>
+          </div>
+          <p className="muted">
+            When a claim checks out, the verifier also says which call the ticket
+            actually completed on — so a player who only noticed several numbers later
+            can be ruled a bogey. You still make the call; the app only tells you when
+            it happened. Announce this one to the room before you start.
+          </p>
+        </div>
+      </section>
 
       {problems.length > 0 && (
         <ul className="stack-tight">

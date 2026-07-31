@@ -14,7 +14,7 @@ import {
   allConditionsWon,
   bogeyCount,
   latestCall,
-  winnerOf,
+  winnersOf,
   type Ruling,
   type StoredGame,
 } from './game'
@@ -111,16 +111,22 @@ export function CallerScreen({
         <h2 className="subtitle">Playing for</h2>
         <ul className="card stack-tight">
           {config.conditions.map((condition) => {
-            const winner = winnerOf(game.rulings, condition.id)
+            // More than one winner is a tie the conductor ruled deliberately; the
+            // points split between them (PRD.md §7.5).
+            const winners = winnersOf(game.rulings, condition.id)
             return (
               <li
                 key={condition.id}
                 className="flex items-baseline justify-between gap-3"
               >
                 <span>{condition.name}</span>
-                <span className={`muted tabular-nums ${winner ? 'is-valid' : ''}`}>
-                  {winner ? `Seat ${formatSeat(winner.seat)}` : 'Open'} ·{' '}
-                  {condition.points} pts
+                <span
+                  className={`muted tabular-nums ${winners.length > 0 ? 'is-valid' : ''}`}
+                >
+                  {winners.length === 0
+                    ? 'Open'
+                    : winners.map((seat) => `Seat ${formatSeat(seat)}`).join(' + ')}{' '}
+                  · {condition.points} pts
                 </span>
               </li>
             )

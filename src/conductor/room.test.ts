@@ -26,6 +26,7 @@ function config(overrides: Partial<RoomConfig> = {}): RoomConfig {
     playerCount: 12,
     ticketsPerPlayer: 1,
     conditions: defaultConditions(),
+    strictClaimTiming: false,
     ...overrides,
   }
 }

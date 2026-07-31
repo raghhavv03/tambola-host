@@ -245,3 +245,41 @@ export function verifyClaim(
     required: pattern.required,
   }
 }
+
+/**
+ * How many numbers had been called when this pattern FIRST became satisfied, or null
+ * if it still isn't.
+ *
+ * This is the other half of a late claim (PRD.md §7.4). `verifyClaim` answers "does
+ * this hold RIGHT NOW", which is all a lenient room needs. A room playing the strict
+ * house rule also needs "and was it already holding a while ago?" — because a player
+ * who completes on call 34 and only shouts on call 41 has, under that rule, missed it.
+ *
+ * Note this is a fact about the ticket and the draw, not a verdict. Nothing here
+ * decides anything; the conductor is told the number and rules out loud, same as
+ * always. And like verifyClaim, it runs only when the conductor asks — it never
+ * watches a ticket (PRD.md §3, rules 1 and 2).
+ *
+ * @param calledNumbers every number drawn so far, OLDEST FIRST. Order matters here,
+ *                      unlike in verifyClaim — the answer is a position in it.
+ * @returns a 1-based call count (1 = the pattern completed on the very first number),
+ *          or null when the pattern still isn't satisfied.
+ */
+export function completionCall(
+  ticket: Ticket,
+  calledNumbers: number[],
+  pattern: Pattern,
+): number | null {
+  const relevant = new Set(patternNumbers(ticket, pattern))
+
+  let marked = 0
+  for (let i = 0; i < calledNumbers.length; i++) {
+    if (!relevant.has(calledNumbers[i])) continue
+    marked++
+    // The call that tipped it over the line. Everything after this is irrelevant:
+    // a pattern that is satisfied stays satisfied, since numbers are never un-called
+    // (an undo rewrites history rather than adding to it — see conductor/game.ts).
+    if (marked >= pattern.required) return i + 1
+  }
+  return null
+}

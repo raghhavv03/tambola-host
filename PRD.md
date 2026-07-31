@@ -197,11 +197,51 @@ condition and, say, "column 3" is not.
 A custom condition is: a name, a set of logical positions, and points. Presets are just
 built-in patterns in the same shape, so verification has one code path.
 
-### 7.3 Claim resolution (v1)
+### 7.3 Claim resolution
 
-- One winner per condition. First valid claim closes it.
+- One winner per condition. First valid claim closes it — **unless** two or more
+  claims are ruled a genuine tie (§7.5).
 - A bogey makes that seat ineligible for that condition, permanently, for that game.
-- Splitting a condition between simultaneous claimants: **not in v1.**
+- **Two winners of "the same" prize** (e.g. two Full Houses) are two separate
+  conditions: same pattern, different names, their own points. This already works
+  today via custom conditions (§7.2) — nothing new to build, just a UX gap (see
+  `ROADMAP.md` P6). The app does not cross-check "has this seat already won an
+  identical pattern elsewhere" — that stays a conductor judgment call, same as it
+  would with a paper ticket.
+
+### 7.4 Late claims (house rule, off by default)
+
+Some rooms play it strict: if a ticket was already complete when an earlier number
+was called, and the player only shouts after further numbers have since been drawn,
+that claim is ruled a bogey — even though the ticket is still, mechanically, valid.
+This is a conductor-chosen house rule, not universal law, so it's a per-room toggle
+at setup, default **off**.
+
+- Every ruling already records `atCall` — how many numbers had been called when it
+  was ruled (`conductor/game.ts`). What's missing is the other half: the call count
+  at which the pattern *first* became satisfied. That's one new pure function over
+  the ticket, the call history and the pattern — no new storage.
+- When the toggle is on and a claim checks out valid, the verifier also shows
+  whether it was on time or late (completed at call N, checked at call M > N). The
+  conductor still rules explicitly on what to do with that — the app surfaces the
+  fact, never the verdict. Rule 2 (§3) holds either way.
+
+### 7.5 Split wins (genuine ties)
+
+If two or more players shout the same condition at effectively the same moment and
+the conductor cannot honestly say who was first, that condition's points split
+evenly between every claimant ruled valid in that moment, instead of the first one
+taking all of it.
+
+- Not a "how many winners does this condition have" setting configured up front —
+  it's an explicit action the conductor takes when checking a claim: "tie this with
+  seat 07" instead of "first valid claim wins." Only a condition that's still open
+  can be tied into; the app will not reopen an already-closed one.
+- Points split evenly; a remainder that doesn't divide cleanly (15 points, 2
+  winners) needs a rule. Proposed: the extra point goes to the lower seat number,
+  shown plainly on the results screen so nobody does the maths by hand.
+- The results screen and per-seat scoreboard show a split explicitly — e.g. "Full
+  House — tied with seat 07, 20 pts each."
 
 ---
 
@@ -232,7 +272,7 @@ gaming: the app is a scorekeeper, not a stakeholder.
 - Any backend, database, or cross-device sync
 - Auto-call, voice calling, sound packs
 - Animations, colour system, visual identity
-- Split prizes, multi-round tournaments, statistics across games
+- Multi-round tournaments, statistics across games
 
 ---
 
@@ -270,7 +310,7 @@ cannot know the room's custom condition names or points.
 
 - **Recommended (v1), built in P1:** the code carries the seed plus the *preset*
   conditions and their points, packed into a slightly longer code — 5 seed characters
-  plus up to 9 of rules, e.g. `K3P9Z-1A2B3C4D5`. Longer than first sketched, still
+  plus up to 10 of rules, e.g. `K3P9Z-1A2B3C4D5E`. Longer than first sketched, still
   typeable; see `PROGRESS.md` for the layout and why points aren't quantised. Custom
   conditions travel by QR only; if the conductor has defined any, the setup and
   distribution screens say plainly that code-joiners will not see them at all — an

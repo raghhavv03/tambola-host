@@ -57,6 +57,9 @@ export function JoinForm() {
             playerCount: 0,
             ticketsPerPlayer: 0,
             conditions: room.conditions,
+            // A ruling rule, and this device never rules on anything — see the field's
+            // note in engine/room.ts. Neither carrier carries it either way.
+            strictClaimTiming: false,
           })
 
     // A full page load, not a client-side route change: /t is a separate bundle

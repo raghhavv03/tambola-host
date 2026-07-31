@@ -123,6 +123,11 @@ function parseConfig(raw: unknown): RoomConfig | null {
     playerCount: raw.playerCount,
     ticketsPerPlayer: raw.ticketsPerPlayer,
     conditions,
+    // Read tolerantly rather than demanded: a room saved before the strict-timing rule
+    // existed simply doesn't have the field, and losing a set-up room over a missing
+    // boolean would be a worse trade than defaulting it to the off position it would
+    // have had anyway.
+    strictClaimTiming: raw.strictClaimTiming === true,
   }
 }
 

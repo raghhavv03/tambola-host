@@ -12,11 +12,13 @@ import {
   latestCall,
   loadGame,
   newGame,
+  isOpen,
   openConditions,
   parseStoredGame,
   saveGame,
   seatScores,
-  winnerOf,
+  splitPoints,
+  winnersOf,
   type Ruling,
   type StoredGame,
 } from './game'
@@ -27,6 +29,7 @@ const CONFIG: RoomConfig = {
   playerCount: 6,
   ticketsPerPlayer: 1,
   conditions: defaultConditions(),
+  strictClaimTiming: false,
 }
 
 /** A game a few numbers into its draw. */
@@ -70,15 +73,27 @@ describe('a new game', () => {
 })
 
 describe('rulings', () => {
-  it('closes a condition to the first valid claim', () => {
+  it('closes a condition to a valid claim', () => {
+    const rulings = [ruling('topLine', 3, true)]
+    expect(winnersOf(rulings, 'topLine')).toEqual([3])
+    expect(isOpen(rulings, 'topLine')).toBe(false)
+    expect(winnersOf(rulings, 'fullHouse')).toEqual([])
+    expect(isOpen(rulings, 'fullHouse')).toBe(true)
+  })
+
+  it('treats a second valid claim on one condition as a tie', () => {
     const rulings = [ruling('topLine', 3, true), ruling('topLine', 5, true)]
-    expect(winnerOf(rulings, 'topLine')?.seat).toBe(3)
-    expect(winnerOf(rulings, 'fullHouse')).toBeNull()
+    expect(winnersOf(rulings, 'topLine')).toEqual([3, 5])
+  })
+
+  it('does not let one seat win the same condition twice', () => {
+    const rulings = [ruling('topLine', 3, true), ruling('topLine', 3, true)]
+    expect(winnersOf(rulings, 'topLine')).toEqual([3])
   })
 
   it('a bogey does not close a condition', () => {
     const rulings = [ruling('topLine', 3, false)]
-    expect(winnerOf(rulings, 'topLine')).toBeNull()
+    expect(winnersOf(rulings, 'topLine')).toEqual([])
     expect(openConditions(CONFIG, rulings).map((c) => c.id)).toContain('topLine')
   })
 
@@ -123,7 +138,8 @@ describe('the scoreboard', () => {
     expect(scores.map((s) => s.seat)).toEqual([2, 1])
     expect(scores[0].points).toBe(35)
     expect(scores[1].points).toBe(25)
-    expect(scores[1].won.map((c) => c.id)).toEqual(['earlyFive', 'topLine'])
+    expect(scores[1].won.map((w) => w.condition.id)).toEqual(['earlyFive', 'topLine'])
+    expect(scores[1].won.every((w) => w.sharedWith.length === 0)).toBe(true)
     expect(scores[1].bogeys).toBe(1)
   })
 
@@ -134,6 +150,65 @@ describe('the scoreboard', () => {
 
   it('is empty when nobody claimed anything', () => {
     expect(seatScores(CONFIG, [])).toEqual([])
+  })
+})
+
+describe('splitting a tied condition', () => {
+  it('divides evenly when it divides evenly', () => {
+    expect(splitPoints(30, [4, 1])).toEqual([
+      { seat: 1, points: 15 },
+      { seat: 4, points: 15 },
+    ])
+  })
+
+  it('gives the remainder to the lowest seats', () => {
+    // 35 between 2 is 17.5; seat 1 takes the odd point.
+    expect(splitPoints(35, [7, 1])).toEqual([
+      { seat: 1, points: 18 },
+      { seat: 7, points: 17 },
+    ])
+    // 35 between 4 is 8.75; the first three seats take a point each.
+    expect(splitPoints(35, [3, 0, 9, 6])).toEqual([
+      { seat: 0, points: 9 },
+      { seat: 3, points: 9 },
+      { seat: 6, points: 9 },
+      { seat: 9, points: 8 },
+    ])
+  })
+
+  it('never invents or loses a point, however it divides', () => {
+    for (let winners = 1; winners <= 6; winners++) {
+      const seats = Array.from({ length: winners }, (_, i) => i)
+      for (let points = 1; points <= 100; points++) {
+        const shares = splitPoints(points, seats)
+        expect(shares.reduce((sum, s) => sum + s.points, 0)).toBe(points)
+      }
+    }
+  })
+
+  it('has nothing to split between nobody', () => {
+    expect(splitPoints(40, [])).toEqual([])
+  })
+
+  it('shows up on the scoreboard as a share, with who it was shared with', () => {
+    // fullHouse = 35 in the default split, tied between seats 2 and 5.
+    const rulings = [ruling('fullHouse', 5, true), ruling('fullHouse', 2, true)]
+    const scores = seatScores(CONFIG, rulings)
+
+    expect(scores.map((s) => s.seat)).toEqual([2, 5])
+    expect(scores[0].points).toBe(18)
+    expect(scores[1].points).toBe(17)
+    expect(scores[0].won[0].sharedWith).toEqual([5])
+    expect(scores[1].won[0].sharedWith).toEqual([2])
+  })
+
+  it('counts a tied condition as won, not open', () => {
+    const rulings = CONFIG.conditions.flatMap((c) => [
+      ruling(c.id, 0, true),
+      ruling(c.id, 1, true),
+    ])
+    expect(openConditions(CONFIG, rulings)).toEqual([])
+    expect(allConditionsWon(CONFIG, rulings)).toBe(true)
   })
 })
 
