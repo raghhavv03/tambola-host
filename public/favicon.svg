@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="112" fill="#0a0a0a"/>
-  <rect x="28" y="28" width="456" height="456" rx="88" fill="#171717"/>
-  <!-- "9": a ring with a downward tail -->
-  <circle cx="196" cy="214" r="60" fill="none" stroke="#FF9933" stroke-width="40"/>
-  <path d="M244 244 Q262 342 196 396" fill="none" stroke="#FF9933" stroke-width="40" stroke-linecap="round"/>
-  <!-- "0": a ring -->
-  <circle cx="332" cy="300" r="72" fill="none" stroke="#FF9933" stroke-width="42"/>
-</svg>
