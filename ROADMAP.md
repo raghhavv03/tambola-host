@@ -126,8 +126,100 @@ ends with a working app.
 - Tests: copy round-trips (several presets, a copy whose preset is switched off, a
   sixth copy falling out), the legacy code literal, and copy-id parsing.
 
+## P9 — Correctness: undo and ruling integrity (built)
+
+The app is deployed. These four bugs are what stand between that and a real game — none
+of them are features, all of them are the app breaking its own stated guarantees.
+
+- **Undo after a ruling corrupts the saved game.** `handleUndo` (`conductor/
+  ConductorApp.tsx`) shortens `game.history` but never touches `game.rulings`, so a
+  ruling's `atCall` can end up greater than the new history length. `parseRulings`
+  (`conductor/game.ts`) rejects that the next time the game loads — `parseStoredGame`
+  returns null, `ConductorApp` reads that as "no game", and the conductor comes back
+  to distribution with the whole game gone and the rules unfrozen. It doesn't show up
+  until a reload, which is exactly when a party conductor's phone lock hits.
+  - Fix: `handleUndo` refuses when
+    `game.rulings.some(r => r.atCall === game.history.length)` — the draw about to be
+    undone is one a ruling actually depends on — and `CallerScreen` says why instead of
+    the button just doing nothing. Pairs with the next item: undo the ruling first, and
+    the draw is free again.
+- **A ruling can't be corrected.** No screen offers a way back from a mis-typed seat or
+  a wrong button tap. The player's own ledger has undo on every row (P4); the
+  conductor's does not, and the conductor's is the one that's the source of truth (D2)
+  — the one ledger in the app with no way to fix a slip is the one that decides the
+  money split.
+  - Add `handleUndoRuling(index: number)` to `ConductorApp` —
+    `rulings.filter((_, i) => i !== index)` — and a "Recent rulings" list on
+    `CallerScreen` (most recent first, capped like the recent-calls strip) with a
+    `.btn-inline` "Undo" per row, the same look the distribution list's seat-undo
+    already uses. This is framed as correcting the record, not reopening a fairly-won
+    prize — the app has no way to tell those two apart, so the UI doesn't pretend to.
+    A confirm step guards a stray tap, the same weight as "Start a different room".
+- Tests: a regression case for the undo-corruption bug through the real
+  `parseStoredGame` / `parseRulings` path; `handleUndoRuling` reopening a condition it
+  was the sole winner of, and clearing a bogey so the seat is eligible again.
+
+## P10 — Offline reliability
+
+- **Offline only works at `/`.** `sw.ts` is precache-only with no navigation fallback —
+  Workbox's precache route only matches precached files, and `/t`, `/join`, `/conduct`
+  aren't files, they're SPA paths `vercel.json` rewrites to `index.html` at the server.
+  Offline, there's no server to do that rewrite, so a scanned QR opened without signal
+  gets a network error. This contradicts both `sw.ts`'s own header comment ("a scanned
+  /t ticket works offline") and CLAUDE.md's "offline-capable".
+  - Fix: `registerRoute(new NavigationRoute(createHandlerBoundToURL('index.html')))` in
+    `sw.ts`, mirroring what `vercel.json`'s rewrite already does online. Needs
+    `workbox-routing` added as a dependency (workbox-precaching is already one).
+  - No vitest coverage is possible — Workbox's navigation matching is a browser-only
+    API. Verify with DevTools offline mode per CLAUDE.md's build + lint + browser-check
+    bar: load the app once online (so it precaches), go offline, open a `/t#…` link
+    cold.
+
+## P11 — Live-game ergonomics
+
+- **The caller screen loses the called number while checking a claim.**
+  `ClaimVerifier` sits below the board and the conditions panel on `CallerScreen`, so
+  confirming a claim scrolls the "just called" number off screen — the one number
+  everyone in the room is also looking at, mid-verification. Fix: a lightweight sticky
+  header repeating the latest call while scrolled. Pure functional `position: sticky`,
+  no colour or animation added — doesn't touch the "no design system" rule, it's
+  layout, not decoration.
+- **Handing out tickets one by one doesn't scale past a few players.**
+  `DistributionScreen` pages 6 seats at a time with one tap each; a 30-player room is
+  five pages of individual taps while a room full of people waits. Add a per-page
+  "Mark this page given" bulk action, same confirm-weight as the screen's other bulk
+  state changes.
+- Tests: only where a bulk-issue helper is pure enough to earn one (`room.ts`); the
+  rest is a browser walk-through per CLAUDE.md's testing bar — these are layout and
+  flow changes, not new logic.
+
+## P12 — Optional seat labels
+
+- Conductor-side only, no carrier change, no airgap impact: the player's bundle never
+  sees a name, so nothing is added to the room code or the QR blob — this is a label
+  the conductor privately attaches to a seat number they already control.
+- `StoredRoom` (`conductor/room.ts`) gains `seatNames: Record<number, string>`, saved
+  and loaded the same way `issuedSeats` already is.
+- Wired into every place a seat number is shown on the conductor's side —
+  `DistributionScreen` (a name field next to "Mark given"), `CallerScreen`'s
+  conditions panel and bogey list, `ClaimVerifier`, `ResultsScreen` — as
+  "Priya · seat 04" when a name exists, falling back to "Seat 04" always.
+  `ResultsScreen` is what gets read out at the end of the night; naming it beats a
+  room full of "seat 07"s when it's time to actually split what got pooled.
+- Tests: `seatNames` persistence round-trip in `room.test.ts`.
+
 ## Later (not this iteration)
 
 Design system and animation · theme packs · native app build · accounts and social
 login · backend (fixes the code-vs-QR rule-sharing gap, enables live sync and rooms that
 outlive one device) · cross-game stats.
+
+Also noted, not queued:
+
+- Traditional book-of-6 ticket generation. `generateSet` (`engine/ticket.ts`) gives
+  distinct tickets, not the traditional book-of-6 partition of 1–90 — documented in
+  the code, not a bug, just not what a paper tambola book does. A different algorithm
+  if it's ever wanted.
+- A one-screen pilot of the eventual design pass, run before the pass itself, to test
+  PRD §10's "lands without a rebuild" claim while it's cheap to be wrong — one screen
+  to redo, not a dozen screens that have hardened around plain CSS in the meantime.

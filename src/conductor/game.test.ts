@@ -6,6 +6,7 @@ import { installMockLocalStorage } from '../test/mockLocalStorage'
 import {
   allConditionsWon,
   bogeyCount,
+  canUndoDraw,
   clearGame,
   hasBogeyed,
   isFrozen,
@@ -16,10 +17,12 @@ import {
   isOpen,
   openConditions,
   parseStoredGame,
+  rulingsOnLatestCall,
   saveGame,
   seatScores,
   splitPoints,
   winnersOf,
+  withoutRuling,
   type Ruling,
   type StoredGame,
 } from './game'
@@ -248,6 +251,97 @@ describe('splitting a tied condition', () => {
     ])
     expect(openConditions(CONFIG, rulings)).toEqual([])
     expect(allConditionsWon(CONFIG, rulings)).toBe(true)
+  })
+})
+
+describe('undoing a draw', () => {
+  // `ruling()` records atCall 10, i.e. "ruled when ten numbers were out".
+  it('is refused while a ruling was made on the number about to go', () => {
+    const game = gameAfter(10, [ruling('topLine', 1, true)])
+    expect(rulingsOnLatestCall(game)).toHaveLength(1)
+    expect(canUndoDraw(game)).toBe(false)
+  })
+
+  it('is allowed once another number has come out on top of that ruling', () => {
+    expect(canUndoDraw(gameAfter(11, [ruling('topLine', 1, true)]))).toBe(true)
+  })
+
+  it('is refused by a bogey too — a bogey is a ruling like any other', () => {
+    expect(canUndoDraw(gameAfter(10, [ruling('topLine', 1, false)]))).toBe(false)
+  })
+
+  it('is refused before the first number, there being nothing to take back', () => {
+    expect(canUndoDraw(gameAfter(0))).toBe(false)
+  })
+
+  it('would leave a game that no longer loads — the bug this guards against', () => {
+    // The regression, walked end to end through the real parse path: ten numbers out,
+    // a claim ruled on the tenth.
+    const game = gameAfter(10, [ruling('topLine', 1, true)])
+    expect(parseStoredGame({ ...game, version: 1 }, CONFIG)).not.toBeNull()
+
+    // Undoing the draw the old way left the ruling pointing at call 10 with only nine
+    // numbers in the history. Nothing complains until the next load, which is where
+    // the whole game quietly disappeared.
+    const shortened = { ...game, history: game.history.slice(0, -1), version: 1 }
+    expect(parseStoredGame(shortened, CONFIG)).toBeNull()
+
+    // Undo the ruling first and the draw comes back for free.
+    const corrected = withoutRuling(game, 0)
+    expect(canUndoDraw(corrected)).toBe(true)
+    const after = { ...corrected, history: corrected.history.slice(0, -1), version: 1 }
+    expect(parseStoredGame(after, CONFIG)).not.toBeNull()
+  })
+})
+
+describe('undoing a ruling', () => {
+  it('reopens a condition it was the only winner of', () => {
+    const game = gameAfter(10, [ruling('topLine', 1, true)])
+    expect(isOpen(game.rulings, 'topLine')).toBe(false)
+
+    const corrected = withoutRuling(game, 0)
+    expect(isOpen(corrected.rulings, 'topLine')).toBe(true)
+    expect(openConditions(CONFIG, corrected.rulings).map((c) => c.id)).toContain('topLine')
+  })
+
+  it('leaves the other winner of a tie holding the whole condition', () => {
+    const game = gameAfter(10, [ruling('fullHouse', 1, true), ruling('fullHouse', 5, true)])
+    const corrected = withoutRuling(game, 1)
+
+    expect(winnersOf(corrected.rulings, 'fullHouse')).toEqual([1])
+    // fullHouse is 35 in the default split; no longer shared, so no longer halved.
+    expect(seatScores(CONFIG, corrected.rulings)[0]).toMatchObject({ seat: 1, points: 35 })
+  })
+
+  it('clears a bogey, so the seat can claim that condition again', () => {
+    const game = gameAfter(10, [ruling('topLine', 3, false)])
+    expect(hasBogeyed(game.rulings, 'topLine', 3)).toBe(true)
+
+    const corrected = withoutRuling(game, 0)
+    expect(hasBogeyed(corrected.rulings, 'topLine', 3)).toBe(false)
+    expect(bogeyCount(corrected.rulings, 3)).toBe(0)
+  })
+
+  it('strikes off the row asked for, not the last one', () => {
+    const game = gameAfter(10, [
+      ruling('topLine', 1, true),
+      ruling('middleLine', 2, true),
+      ruling('bottomLine', 3, true),
+    ])
+    const corrected = withoutRuling(game, 1)
+    expect(corrected.rulings.map((r) => r.conditionId)).toEqual(['topLine', 'bottomLine'])
+  })
+
+  it('leaves the game alone when the index is not a row', () => {
+    const game = gameAfter(10, [ruling('topLine', 1, true)])
+    expect(withoutRuling(game, 1)).toEqual(game)
+    expect(withoutRuling(game, -1)).toEqual(game)
+  })
+
+  it('leaves a record that still loads', () => {
+    const game = gameAfter(10, [ruling('topLine', 1, true), ruling('fullHouse', 2, true)])
+    const corrected = withoutRuling(game, 0)
+    expect(parseStoredGame({ ...corrected, version: 1 }, CONFIG)).toEqual(corrected)
   })
 })
 

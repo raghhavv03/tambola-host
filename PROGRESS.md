@@ -290,11 +290,43 @@ State, not rules. Read with `PRD.md` (spec), `ROADMAP.md` (plan) and `CLAUDE.md`
     mark a seat given (QR gone, Undo shown, print button drops to 11). No console
     errors.
 
+- **P9 undo and ruling integrity** (branch `major-changes`) — the first of the four
+  pre-launch correctness phases.
+  - **Undoing a draw underneath a ruling no longer eats the game.** `handleUndo`
+    shortened `game.history` and left `game.rulings` alone, so a ruling's `atCall` could
+    end up ahead of the history — which `parseRulings` correctly rejects, taking
+    `parseStoredGame` to null and the conductor back to distribution with the whole game
+    gone and the rules unfrozen. Nothing showed it until the next load, i.e. the next
+    time a party conductor's phone locked. `canUndoDraw` (`conductor/game.ts`) now
+    refuses while any ruling was made on the number about to go, `CallerScreen` disables
+    the button and says why, and `handleUndo` re-checks so a stale tap can't slip past.
+  - **A ruling can be taken back.** `withoutRuling(game, index)` plus
+    `handleUndoRuling` and a "Recent rulings" list on `CallerScreen` — last six, most
+    recent first, seat + condition + Won/Bogey + which call, and a `.btn-inline` "Undo"
+    per row behind a confirm. Undoing reopens a condition, releases a tie back to its
+    other winner, or clears a bogey so the seat is eligible again. Until now the
+    conductor's ledger — the one that decides how the pot gets split (D2) — was the only
+    ledger in the app with no way back from a slip; the player's own prize list has had
+    undo on every row since P4.
+  - The two fixes are one feature: the blocked undo tells you to undo the ruling first,
+    and doing that frees the draw. `withoutRuling` ignores an index that isn't a row
+    rather than dropping the last one, which is what a bare `filter` on a stale index
+    would have done.
+  - Suite: 176 tests, lint and build clean. Walked in the browser at 375×812: start a
+    game → draw 4 → record a bogey on call 4 → undo-draw disabled with the reason →
+    reload (game resumes, still blocked) → undo the ruling behind its confirm → bogey
+    list and the block both gone → undo the draw → reload (3 called, game intact). No
+    console errors.
+
 ## Next
 
-- Nothing queued. P0–P8 are done and the branch is a working app on both journeys.
-  What comes after is in `ROADMAP.md` under "Later" — design system, native build,
-  backend — and none of it starts without a decision to start it.
+- **P10–P12 queued, not started** (see `ROADMAP.md`): no offline navigation fallback
+  despite the app claiming to be offline-capable, a caller screen that loses the called
+  number mid-claim, a hand-out flow that doesn't scale past a few players, and no way to
+  put a name on a seat for the results screen. The app is deployed, but the first real
+  game waits until those land.
+- Beyond P12: `ROADMAP.md` under "Later" — design system, native build, backend — none
+  of it starts without a decision to start it.
 
 ## Key decisions (don't relitigate)
 
@@ -384,3 +416,20 @@ State, not rules. Read with `PRD.md` (spec), `ROADMAP.md` (plan) and `CLAUDE.md`
   went, never which seats, and the odd point follows seat order — so "3–4 pts" is the
   true answer and a single figure would be a guess. Same D2 reasoning as the rest of the
   player's notebook: the conductor's ledger is what settles it.
+- **Undoing a ruling is correcting the record, not reopening a prize** (P9). The app has
+  no way to tell a mis-typed seat from a change of mind about a prize somebody fairly
+  won, so it doesn't pretend to: one control, one confirm, and the wording says what it
+  does rather than why you might be doing it. The alternative — no way back at all — put
+  the app's most consequential ledger below the player's own notebook, which has had
+  undo on every row since P4.
+- **A ruling pins the number it was made on** (P9). `Ruling.atCall` is validated against
+  the history on load, so undoing a draw out from under a ruling doesn't produce a wrong
+  game, it produces an unloadable one. Blocking the undo (rather than rewriting the
+  rulings to fit, or loosening the check) keeps the invariant that made the corruption
+  detectable in the first place.
+- **A typed room code cannot validate that a seat exists** (accepted limitation, found
+  in the P9–P12 review, not fixed). The code carries no ticket count by design (D1) —
+  giving it one would spend characters catching a typo that already gets caught, just
+  later, at the conductor's `ClaimVerifier` ("This room only goes up to seat NN"). A
+  mistyped seat number opens a real, fully playable ticket that simply can never be
+  claimed. Left as-is on purpose rather than bent to fix.

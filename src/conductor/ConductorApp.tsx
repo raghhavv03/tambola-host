@@ -25,11 +25,13 @@ import { ResultsScreen } from './ResultsScreen'
 import { SetupScreen } from './SetupScreen'
 import { clearRoom, loadRoom, saveRoom, type StoredRoom } from './room'
 import {
+  canUndoDraw,
   clearGame,
   isFrozen,
   loadGame,
   newGame,
   saveGame,
+  withoutRuling,
   type Ruling,
   type StoredGame,
 } from './game'
@@ -114,8 +116,16 @@ export function ConductorApp() {
   }
 
   function handleUndo() {
-    if (game === null || game.history.length === 0) return
+    // A ruling made on the number about to go would end up pointing past the end of the
+    // history, and the game would refuse to load next time (see canUndoDraw). The
+    // button is already disabled by then; this is the structural half of the same rule.
+    if (game === null || !canUndoDraw(game)) return
     commitGame({ ...game, history: game.history.slice(0, -1) })
+  }
+
+  function handleUndoRuling(index: number) {
+    if (game === null) return
+    commitGame(withoutRuling(game, index))
   }
 
   function handleRule(ruling: Omit<Ruling, 'atCall'>) {
@@ -184,6 +194,7 @@ export function ConductorApp() {
         onDraw={handleDraw}
         onUndo={handleUndo}
         onRule={handleRule}
+        onUndoRuling={handleUndoRuling}
         onEnd={handleEnd}
         onShowTickets={() => setViewingTickets(true)}
       />

@@ -153,6 +153,41 @@ export function splitPoints(
   return ordered.map((seat, i) => ({ seat, points: base + (i < remainder ? 1 : 0) }))
 }
 
+/**
+ * The rulings that were made on the number currently on the board.
+ *
+ * These are what stop the last draw being taken back. `Ruling.atCall` records how many
+ * numbers were out when the ruling was made, and `parseRulings` refuses to load a game
+ * where that count runs ahead of the history — so shortening the history underneath a
+ * ruling doesn't merely look wrong, it makes the saved game unreadable. Worse, nothing
+ * notices until the next load, which at a party is whenever the conductor's phone locks.
+ */
+export function rulingsOnLatestCall(game: StoredGame): Ruling[] {
+  return game.rulings.filter((r) => r.atCall === game.history.length)
+}
+
+/** Can the last number be taken back? Not while a ruling depends on it — undo that first. */
+export function canUndoDraw(game: StoredGame): boolean {
+  return game.history.length > 0 && rulingsOnLatestCall(game).length === 0
+}
+
+/**
+ * The game with one ruling struck off the record.
+ *
+ * This is correcting the ledger, not reopening a fairly-won prize: the app has no way
+ * to tell a mis-typed seat from a change of mind, so it doesn't pretend to. The
+ * conductor's ledger is the source of truth (D2) and it was the one ledger in the app
+ * with no way back from a slip — the player's own prize list has had undo on every row
+ * since P4.
+ *
+ * An index outside the list leaves the game alone rather than silently dropping the
+ * last entry, which is what a bare `filter` on a stale index would do.
+ */
+export function withoutRuling(game: StoredGame, index: number): StoredGame {
+  if (index < 0 || index >= game.rulings.length) return game
+  return { ...game, rulings: game.rulings.filter((_, i) => i !== index) }
+}
+
 /** Has this seat already bogeyed this condition? If so it can never win it. */
 export function hasBogeyed(
   rulings: readonly Ruling[],

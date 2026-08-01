@@ -4,7 +4,7 @@
 // one on (PRD.md §3, rule 3) — the pace of a tambola game is a person reading the room,
 // and a countdown would take that away.
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { RoomConfig } from '../engine/room'
 import { ClaimVerifier } from './ClaimVerifier'
 import { NumberBoard } from './NumberBoard'
@@ -13,6 +13,7 @@ import { useWakeLock } from './useWakeLock'
 import {
   allConditionsWon,
   bogeyCount,
+  canUndoDraw,
   latestCall,
   winnersOf,
   type Ruling,
@@ -22,6 +23,9 @@ import {
 /** How many of the previous calls to keep on screen, latest first. */
 const RECENT_COUNT = 6
 
+/** How many rulings the correction list goes back. Same reasoning as RECENT_COUNT. */
+const RECENT_RULINGS = 6
+
 interface CallerScreenProps {
   config: RoomConfig
   game: StoredGame
@@ -30,6 +34,8 @@ interface CallerScreenProps {
   onDraw: () => void
   onUndo: () => void
   onRule: (ruling: Omit<Ruling, 'atCall'>) => void
+  /** Strike one ruling off the record. The index is into `game.rulings`. */
+  onUndoRuling: (index: number) => void
   onEnd: () => void
   onShowTickets: () => void
 }
@@ -41,6 +47,7 @@ export function CallerScreen({
   onDraw,
   onUndo,
   onRule,
+  onUndoRuling,
   onEnd,
   onShowTickets,
 }: CallerScreenProps) {
@@ -48,12 +55,28 @@ export function CallerScreen({
   // conductor unlocking their phone before every call.
   useWakeLock()
 
+  // Which ruling the conductor is being asked to confirm striking off, by its index in
+  // game.rulings. null while nothing is being confirmed.
+  const [confirmingUndo, setConfirmingUndo] = useState<number | null>(null)
+
   const called = useMemo(() => new Set(game.history), [game.history])
   const latest = latestCall(game)
   const remaining = order.length - game.history.length
   // The calls before the latest one, most recent first: what "sorry, what was that?"
   // gets answered with.
   const recent = game.history.slice(-1 - RECENT_COUNT, -1).reverse()
+
+  // A ruling made on the number now on the board pins that number in place — undoing
+  // the draw would leave the ruling pointing past the end of the history, and the game
+  // would refuse to load after the next reload (game.ts, canUndoDraw).
+  const canUndo = canUndoDraw(game)
+
+  // The last few rulings, most recent first, each carrying its real index so undoing
+  // one strikes off the row the conductor actually tapped.
+  const recentRulings = game.rulings
+    .map((ruling, index) => ({ ruling, index }))
+    .slice(-RECENT_RULINGS)
+    .reverse()
 
   // Seats with a bogey against them, so the conductor can see who has been over-eager.
   const bogeySeats = [...new Set(game.rulings.filter((r) => !r.valid).map((r) => r.seat))]
@@ -90,10 +113,17 @@ export function CallerScreen({
         type="button"
         className="btn btn-secondary btn-block"
         onClick={onUndo}
-        disabled={game.history.length === 0}
+        disabled={!canUndo}
       >
         Undo the last draw
       </button>
+
+      {game.history.length > 0 && !canUndo && (
+        <p className="muted">
+          A claim was ruled on this number, so it can't be taken back yet. Undo that
+          ruling below first.
+        </p>
+      )}
 
       {recent.length > 0 && (
         <div className="stack-tight">
@@ -140,6 +170,80 @@ export function CallerScreen({
         rulings={game.rulings}
         onRule={onRule}
       />
+
+      {/* Correcting the record. The conductor's ledger decides how the pot gets split
+          (D2), and until now it was the only ledger in the app a mis-typed seat or a
+          stray tap couldn't be taken back out of — the player's own prize list has had
+          undo on every row since P4. This does not distinguish "I typed the wrong seat"
+          from "I've changed my mind about a prize somebody won": the app has no way to
+          tell those apart, so it doesn't pretend to, and the confirm step is there
+          because the two look identical from here. */}
+      {recentRulings.length > 0 && (
+        <section className="stack-tight">
+          <h2 className="subtitle">Recent rulings</h2>
+          <ul className="card stack">
+            {recentRulings.map(({ ruling, index }) => {
+              const condition = config.conditions.find((c) => c.id === ruling.conditionId)
+              return (
+                <li key={index} className="stack-tight">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="tabular-nums">
+                      Seat {formatSeat(ruling.seat)} ·{' '}
+                      {condition?.name ?? ruling.conditionId}
+                    </span>
+                    <span
+                      className={`muted tabular-nums ${ruling.valid ? 'is-valid' : 'is-bogey'}`}
+                    >
+                      {ruling.valid ? 'Won' : 'Bogey'} · call {ruling.atCall}
+                    </span>
+                  </div>
+
+                  {confirmingUndo === index ? (
+                    <div className="stack-tight">
+                      <p className="muted">
+                        Take this ruling off the record?{' '}
+                        {ruling.valid
+                          ? 'The condition opens up again for whoever claims it next.'
+                          : 'The seat can claim this condition again.'}
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          className="btn"
+                          onClick={() => {
+                            onUndoRuling(index)
+                            setConfirmingUndo(null)
+                          }}
+                        >
+                          Undo the ruling
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={() => setConfirmingUndo(null)}
+                        >
+                          Keep it
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    // The smaller of the two looks: recording a ruling is the common
+                    // action, taking one back is the correction — same weighting as
+                    // the distribution list's "Undo".
+                    <button
+                      type="button"
+                      className="btn-inline self-start"
+                      onClick={() => setConfirmingUndo(index)}
+                    >
+                      Undo
+                    </button>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      )}
 
       {bogeySeats.length > 0 && (
         <section className="stack-tight">
