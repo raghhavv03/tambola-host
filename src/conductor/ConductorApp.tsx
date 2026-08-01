@@ -23,7 +23,14 @@ import { CallerScreen } from './CallerScreen'
 import { DistributionScreen } from './DistributionScreen'
 import { ResultsScreen } from './ResultsScreen'
 import { SetupScreen } from './SetupScreen'
-import { clearRoom, loadRoom, saveRoom, withSeatsIssued, type StoredRoom } from './room'
+import {
+  clearRoom,
+  loadRoom,
+  saveRoom,
+  withSeatName,
+  withSeatsIssued,
+  type StoredRoom,
+} from './room'
 import {
   canUndoDraw,
   clearGame,
@@ -79,8 +86,18 @@ export function ConductorApp() {
     // on seats that no longer exist. Drop those rather than carry a phantom count.
     const total = config.playerCount * config.ticketsPerPlayer
     const issuedSeats = (room?.issuedSeats ?? []).filter((seat) => seat < total)
-    commitRoom({ config, issuedSeats })
+    // Same reasoning for the names: a label on a seat the room no longer has is a ghost
+    // that would come back the moment the conductor grew the room again.
+    const seatNames = Object.fromEntries(
+      Object.entries(room?.seatNames ?? {}).filter(([seat]) => Number(seat) < total),
+    )
+    commitRoom({ config, issuedSeats, seatNames })
     setEditing(false)
+  }
+
+  function handleRenameSeat(seat: number, name: string) {
+    if (room === null) return
+    commitRoom({ ...room, seatNames: withSeatName(room.seatNames, seat, name) })
   }
 
   function handleToggleIssued(seat: number) {
@@ -176,6 +193,7 @@ export function ConductorApp() {
         room={room}
         onToggleIssued={handleToggleIssued}
         onIssueSeats={handleIssueSeats}
+        onRenameSeat={handleRenameSeat}
         onEdit={isFrozen(game) ? undefined : () => setEditing(true)}
         onDiscard={handleDiscard}
         onStart={handleStartCalling}
@@ -186,6 +204,7 @@ export function ConductorApp() {
     body = (
       <ResultsScreen
         config={room.config}
+        seatNames={room.seatNames}
         game={game}
         onResume={handleResumeGame}
         onPlayAgain={handlePlayAgain}
@@ -195,6 +214,7 @@ export function ConductorApp() {
     body = (
       <CallerScreen
         config={room.config}
+        seatNames={room.seatNames}
         game={game}
         order={order}
         onDraw={handleDraw}

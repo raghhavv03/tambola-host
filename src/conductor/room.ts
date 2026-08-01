@@ -16,11 +16,27 @@ import {
 import type { RoomConfig } from '../engine/room'
 import { STORAGE_KEYS, loadJSON, saveJSON, clearKey } from './storage'
 
+/**
+ * Names the conductor privately attached to seats, keyed by seat number.
+ *
+ * A seat with no entry here is simply "Seat 04" everywhere, which is what every seat
+ * was before this existed — naming is optional at every seat, not all-or-nothing.
+ */
+export type SeatNames = Record<number, string>
+
 /** A room as it sits on disk. */
 export interface StoredRoom {
   config: RoomConfig
   /** Seat numbers already given to a person. Seat number = ticket index. */
   issuedSeats: number[]
+  /**
+   * Optional labels for seats. Conductor-side only: this is NOT part of RoomConfig, so
+   * it rides in neither carrier — not the room code, not the QR blob — and the player's
+   * bundle has no idea it exists. It is a note the conductor keeps about a seat number
+   * they already control, so that the results screen reads out "Priya · seat 04"
+   * instead of a room full of strangers' seat numbers.
+   */
+  seatNames: SeatNames
 }
 
 // Bumped if the shape below ever changes. An unrecognised version is discarded
@@ -51,6 +67,67 @@ export function playerOfSeat(seat: number, ticketsPerPlayer: number): number {
 /** Seat number as it is printed and read out: zero-padded to two digits. */
 export function formatSeat(seat: number): string {
   return String(seat).padStart(2, '0')
+}
+
+/**
+ * How long a seat name is allowed to be.
+ *
+ * Long enough for "Priya's mum", short enough that a name plus a seat number still fits
+ * on one line of a phone next to a points figure. Names are typed at the party, not
+ * imported from anywhere, so this only ever catches a lean on the keyboard.
+ */
+export const MAX_SEAT_NAME = 24
+
+/** Trim and cap whatever was typed. An empty result means "this seat has no name". */
+function cleanSeatName(raw: string): string {
+  return raw.trim().slice(0, MAX_SEAT_NAME)
+}
+
+/**
+ * Set (or clear) one seat's name, returning a new map.
+ *
+ * Typing the field empty REMOVES the entry rather than storing an empty string, so
+ * "has a name" is one check everywhere else and a cleared field can't leave a seat
+ * labelled "· seat 04".
+ *
+ * The value is capped but NOT trimmed, because this runs on every keystroke of a
+ * controlled input: trimming here would eat the space in "Priya K" the moment it was
+ * typed, and the second word could never be started. Whitespace-only is still nothing,
+ * and `parseStoredRoom` trims on the way back in, so a stray trailing space lives no
+ * longer than the conductor's next reload.
+ */
+export function withSeatName(
+  seatNames: SeatNames,
+  seat: number,
+  name: string,
+): SeatNames {
+  const next = { ...seatNames }
+  const kept = name.slice(0, MAX_SEAT_NAME)
+  if (kept.trim().length === 0) {
+    delete next[seat]
+  } else {
+    next[seat] = kept
+  }
+  return next
+}
+
+/**
+ * A seat as the conductor should read it out: "Priya · seat 04", or "Seat 04" when
+ * nobody put a name on it.
+ *
+ * The seat number is always there, even alongside a name — it is what the ticket in
+ * the player's hand is printed with, and it is what settles an argument when two people
+ * at a party turn out to be called the same thing.
+ */
+export function seatLabel(seat: number, seatNames: SeatNames): string {
+  const name = seatNames[seat]
+  return name === undefined ? `Seat ${formatSeat(seat)}` : `${name} · seat ${formatSeat(seat)}`
+}
+
+/** The same label mid-sentence, where a capital S would read as a new sentence. */
+export function seatLabelInline(seat: number, seatNames: SeatNames): string {
+  const name = seatNames[seat]
+  return name === undefined ? `seat ${formatSeat(seat)}` : `${name} · seat ${formatSeat(seat)}`
 }
 
 /**
@@ -111,7 +188,35 @@ export function parseStoredRoom(raw: unknown): StoredRoom | null {
       )
     : []
 
-  return { config, issuedSeats: [...new Set(issuedSeats)].sort((a, b) => a - b) }
+  return {
+    config,
+    issuedSeats: [...new Set(issuedSeats)].sort((a, b) => a - b),
+    seatNames: parseSeatNames(raw.seatNames, total),
+  }
+}
+
+/**
+ * Read the seat names back, dropping anything that isn't one.
+ *
+ * Tolerant on purpose, the same way `strictClaimTiming` is: a room saved before names
+ * existed simply has no field here, and throwing away a set-up room over a missing
+ * optional label would be a far worse trade than starting with no names.
+ */
+function parseSeatNames(raw: unknown, total: number): SeatNames {
+  if (!isRecord(raw)) return {}
+
+  const names: SeatNames = {}
+  for (const [key, value] of Object.entries(raw)) {
+    // JSON object keys are strings, so the seat number comes back as "4", not 4.
+    const seat = Number(key)
+    if (!Number.isInteger(seat) || seat < 0 || seat >= total) continue
+    if (typeof value !== 'string') continue
+    // Names for seats that no longer exist are dropped for the same reason issued seats
+    // are: the conductor shrank the room, and a label on a seat nobody holds is a ghost.
+    const name = cleanSeatName(value)
+    if (name.length > 0) names[seat] = name
+  }
+  return names
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

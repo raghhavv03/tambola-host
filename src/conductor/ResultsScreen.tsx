@@ -5,11 +5,17 @@
 // happens between humans afterwards (PRD.md §8).
 
 import type { RoomConfig } from '../engine/room'
-import { formatSeat } from './room'
+import { seatLabel, seatLabelInline, type SeatNames } from './room'
 import { isOpen, seatScores, type StoredGame } from './game'
 
 interface ResultsScreenProps {
   config: RoomConfig
+  /**
+   * The conductor's private labels for seats. This screen is what gets read out at the
+   * end of the night, so it is the one that most wants them: "Priya · seat 04 — 35 pts"
+   * settles a split, "seat 04 — 35 pts" starts an argument about who seat 04 was.
+   */
+  seatNames: SeatNames
   game: StoredGame
   /** Back to calling — the conductor ended it early, or by accident. */
   onResume: () => void
@@ -17,7 +23,13 @@ interface ResultsScreenProps {
   onPlayAgain: () => void
 }
 
-export function ResultsScreen({ config, game, onResume, onPlayAgain }: ResultsScreenProps) {
+export function ResultsScreen({
+  config,
+  seatNames,
+  game,
+  onResume,
+  onPlayAgain,
+}: ResultsScreenProps) {
   const scores = seatScores(config, game.rulings)
   const unclaimed = config.conditions.filter((c) => isOpen(game.rulings, c.id))
 
@@ -37,7 +49,9 @@ export function ResultsScreen({ config, game, onResume, onPlayAgain }: ResultsSc
           {scores.map((score) => (
             <li key={score.seat} className="card stack-tight">
               <div className="flex items-baseline justify-between gap-3">
-                <span className="subtitle tabular-nums">Seat {formatSeat(score.seat)}</span>
+                <span className="subtitle tabular-nums">
+                  {seatLabel(score.seat, seatNames)}
+                </span>
                 <span className="title tabular-nums">{score.points} pts</span>
               </div>
               {/* One row each, with the share rather than the condition's face value:
@@ -50,7 +64,7 @@ export function ResultsScreen({ config, game, onResume, onPlayAgain }: ResultsSc
                       {win.condition.name} — {win.points} pts
                       {win.sharedWith.length > 0 &&
                         ` · tied with ${win.sharedWith
-                          .map((seat) => `seat ${formatSeat(seat)}`)
+                          .map((seat) => seatLabelInline(seat, seatNames))
                           .join(', ')}`}
                     </li>
                   ))}

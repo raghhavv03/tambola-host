@@ -4,13 +4,17 @@ import { defaultConditions } from '../engine/patterns'
 import type { RoomConfig } from '../engine/room'
 import { STORAGE_KEYS } from './storage'
 import {
+  MAX_SEAT_NAME,
   clearRoom,
   formatSeat,
   loadRoom,
   parseStoredRoom,
   playerOfSeat,
   saveRoom,
+  seatLabel,
+  seatLabelInline,
   ticketCount,
+  withSeatName,
   withSeatsIssued,
 } from './room'
 
@@ -65,14 +69,65 @@ describe('seats', () => {
   })
 })
 
+describe('seat names', () => {
+  it('reads a seat with no name as the plain seat number', () => {
+    expect(seatLabel(4, {})).toBe('Seat 04')
+    expect(seatLabelInline(4, {})).toBe('seat 04')
+  })
+
+  it('keeps the seat number alongside a name', () => {
+    // Two people at a party can be called the same thing; the seat number is what is
+    // printed on the ticket in their hand, so it never goes away.
+    expect(seatLabel(4, { 4: 'Priya' })).toBe('Priya · seat 04')
+    expect(seatLabelInline(4, { 4: 'Priya' })).toBe('Priya · seat 04')
+  })
+
+  it('sets and caps a name', () => {
+    expect(withSeatName({}, 3, 'Priya')).toEqual({ 3: 'Priya' })
+    expect(withSeatName({}, 3, 'x'.repeat(MAX_SEAT_NAME + 10))[3]).toHaveLength(
+      MAX_SEAT_NAME,
+    )
+  })
+
+  it('keeps the space in a half-typed two-word name', () => {
+    // This runs on every keystroke of a controlled input. Trimming here would delete
+    // the space in "Priya K" as it was typed, and the surname could never be started.
+    expect(withSeatName({}, 3, 'Priya ')).toEqual({ 3: 'Priya ' })
+  })
+
+  it('removes the entry when the field is cleared', () => {
+    // Storing "" would leave the seat labelled "· seat 03" everywhere else.
+    expect(withSeatName({ 3: 'Priya' }, 3, '')).toEqual({})
+    expect(withSeatName({ 3: 'Priya' }, 3, '   ')).toEqual({})
+  })
+
+  it('leaves the other seats alone', () => {
+    expect(withSeatName({ 1: 'Amit', 3: 'Priya' }, 3, 'Ravi')).toEqual({
+      1: 'Amit',
+      3: 'Ravi',
+    })
+  })
+})
+
 describe('saved room', () => {
   it('round-trips a room and its issued seats', () => {
-    expect(saveRoom({ config: config(), issuedSeats: [0, 3] })).toBe(true)
-    expect(loadRoom()).toEqual({ config: config(), issuedSeats: [0, 3] })
+    expect(saveRoom({ config: config(), issuedSeats: [0, 3], seatNames: {} })).toBe(true)
+    expect(loadRoom()).toEqual({ config: config(), issuedSeats: [0, 3], seatNames: {} })
+  })
+
+  it('round-trips seat names', () => {
+    saveRoom({ config: config(), issuedSeats: [], seatNames: { 0: 'Priya', 4: 'Amit' } })
+    expect(loadRoom()!.seatNames).toEqual({ 0: 'Priya', 4: 'Amit' })
+  })
+
+  it('trims a name on the way back in', () => {
+    // withSeatName leaves a half-typed trailing space alone; this is where it goes.
+    saveRoom({ config: config(), issuedSeats: [], seatNames: { 0: 'Priya ' } })
+    expect(loadRoom()!.seatNames).toEqual({ 0: 'Priya' })
   })
 
   it('rebuilds patterns as real patterns, not bare JSON', () => {
-    saveRoom({ config: config(), issuedSeats: [] })
+    saveRoom({ config: config(), issuedSeats: [], seatNames: {} })
     const loaded = loadRoom()!
     const fullHouse = loaded.config.conditions.find((c) => c.id === 'fullHouse')!
     expect(fullHouse.pattern.cells).toHaveLength(15)
@@ -84,7 +139,7 @@ describe('saved room', () => {
   })
 
   it('forgets the room on clear', () => {
-    saveRoom({ config: config(), issuedSeats: [1] })
+    saveRoom({ config: config(), issuedSeats: [1], seatNames: {} })
     clearRoom()
     expect(loadRoom()).toBeNull()
   })
@@ -124,8 +179,33 @@ describe('saved room', () => {
     expect(parseStoredRoom({ version: 1, config: config() })!.issuedSeats).toEqual([])
   })
 
+  it('treats a room saved before names existed as a room with no names', () => {
+    // Read tolerantly, the same way strictClaimTiming is: losing a set-up room over a
+    // missing optional label would be a far worse trade than starting with no names.
+    expect(parseStoredRoom({ version: 1, config: config() })!.seatNames).toEqual({})
+  })
+
+  it('drops names for seats the room no longer has', () => {
+    // The conductor shrank the room from 12 players to 4 after naming seat 9.
+    const room = parseStoredRoom({
+      version: 1,
+      config: config({ playerCount: 4 }),
+      seatNames: { 1: 'Priya', 9: 'Amit' },
+    })
+    expect(room!.seatNames).toEqual({ 1: 'Priya' })
+  })
+
+  it('ignores name entries that are not names', () => {
+    const room = parseStoredRoom({
+      version: 1,
+      config: config(),
+      seatNames: { 0: 42, 1: '   ', 2: 'Priya', x: 'Amit', '-1': 'Ravi' },
+    })
+    expect(room!.seatNames).toEqual({ 2: 'Priya' })
+  })
+
   it('reports a failed write instead of pretending it saved', () => {
     store.failNextWrite()
-    expect(saveRoom({ config: config(), issuedSeats: [] })).toBe(false)
+    expect(saveRoom({ config: config(), issuedSeats: [], seatNames: {} })).toBe(false)
   })
 })

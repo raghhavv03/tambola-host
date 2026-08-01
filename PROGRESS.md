@@ -376,11 +376,50 @@ State, not rules. Read with `PRD.md` (spec), `ROADMAP.md` (plan) and `CLAUDE.md`
     start calling → draw → scroll to the verifier (the bar appears with the number) →
     scroll back (the bar goes, no duplicate). No console errors.
 
+- **P12 optional seat labels** (branch `major-changes`) — the last pre-launch phase.
+  - `StoredRoom` gained `seatNames: Record<number, string>`, saved and loaded exactly the
+    way `issuedSeats` already is. **Conductor-side only**: it is not part of `RoomConfig`,
+    so it rides in neither carrier — not the room code, not the QR blob — and the player's
+    bundle has no idea it exists. No airgap impact, no carrier change; it is a private
+    note about a seat number the conductor already controls.
+  - `room.ts` gained `withSeatName` (the pure edit), `seatLabel` ("Priya · seat 04",
+    falling back to "Seat 04") and `seatLabelInline` — the same label mid-sentence, where
+    a capital S would read as a new sentence ("tied with priya · seat 04").
+    **The seat number never goes away**, name or not: it is what is printed on the ticket
+    in the player's hand, and two people at a party can be called the same thing.
+  - Wired into every conductor-side place a seat is shown: `DistributionScreen` (a "Who
+    has this ticket (optional)" field per row, full width under the QR — the right-hand
+    column is ~150px on a phone), `CallerScreen`'s conditions panel, recent rulings and
+    bogey list, `ClaimVerifier` (header, both "already" lines, the tie preview and the
+    tie-window-shut line), and `ResultsScreen`, which is the one that actually matters —
+    it is what gets read out when it is time to split what got pooled.
+  - The recent-rulings row and the verifier's header now separate seat from condition
+    with an em dash rather than "·": a named seat is already "Priya · seat 04", and a
+    third dot in one line stops reading as a separator.
+  - **Names are not frozen with the rules.** They are reachable mid-game through "Back to
+    the tickets" on purpose — somebody turning up late still needs naming, and a label is
+    not a rule.
+  - Caught in the browser walk: trimming the typed value on every keystroke made
+    two-word names impossible — the space in "Priya K" was eaten the moment it was
+    typed, so the surname could never be started. `withSeatName` now caps but does not
+    trim (whitespace-only still clears the seat), and `parseStoredRoom` trims on the way
+    back in, so a stray trailing space lives no longer than the next reload.
+  - `parseStoredRoom` reads names tolerantly, same as `strictClaimTiming`: a room saved
+    before the field existed loads with none rather than being discarded, non-string
+    entries and names for seats the room no longer has are dropped, and `handleSave`
+    drops them on shrink the same way it already drops stranded issued seats.
+  - Suite: 189 tests, lint and build clean. Walked in the browser at 375×812: a 4-seat
+    room → name seats 00 and 01 → draw 46 → check seat 00's Early Five ("PRIYA · SEAT 00
+    — EARLY FIVE", VALID) → record → conditions panel reads "Priya · seat 00 · 10 pts"
+    and the condition list offers "tie open with Priya · seat 00" → bogey seat 01 →
+    recent rulings and the bogey tally both name them → results read "Priya · seat 00 —
+    10 pts" → reload (names survive) → clear a name (the entry goes, the row falls back
+    to "Seat 00") → retype "Priya K" (the space survives). No console errors.
+
 ## Next
 
-- **P12 queued, not started** (see `ROADMAP.md`): no way to put a name on a seat, so the
-  results screen reads out "seat 07" when it is time to split what got pooled.
-- Beyond P12: `ROADMAP.md` under "Later" — design system, native build, backend — none
+- Nothing queued. P9–P12 were the pre-launch correctness phases and all four are built.
+- Beyond that: `ROADMAP.md` under "Later" — design system, native build, backend — none
   of it starts without a decision to start it.
 
 ## Key decisions (don't relitigate)
@@ -492,6 +531,12 @@ State, not rules. Read with `PRD.md` (spec), `ROADMAP.md` (plan) and `CLAUDE.md`
   the issue list has no backend behind it — it is the only thing stopping one ticket
   reaching two people (P8), and a bulk undo is the one tap that could put a seat back on
   screen after somebody already walked off with it.
+- **A seat name is a conductor's private note, not part of the room** (P12). It lives on
+  `StoredRoom`, never on `RoomConfig`, so no carrier grows by a byte and the player's
+  bundle cannot learn it — the airgap is untouched because there was never anything to
+  send. The seat number stays visible alongside the name everywhere, because the number
+  is what is printed on the ticket in the player's hand. Names are also editable
+  mid-game, unlike the rules: a label is not a rule, and late arrivals still need one.
 - **A typed room code cannot validate that a seat exists** (accepted limitation, found
   in the P9–P12 review, not fixed). The code carries no ticket count by design (D1) —
   giving it one would spend characters catching a typo that already gets caught, just

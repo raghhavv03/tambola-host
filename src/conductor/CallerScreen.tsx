@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { RoomConfig } from '../engine/room'
 import { ClaimVerifier } from './ClaimVerifier'
 import { NumberBoard } from './NumberBoard'
-import { formatSeat } from './room'
+import { seatLabel, type SeatNames } from './room'
 import { useWakeLock } from './useWakeLock'
 import {
   allConditionsWon,
@@ -28,6 +28,8 @@ const RECENT_RULINGS = 6
 
 interface CallerScreenProps {
   config: RoomConfig
+  /** The conductor's private labels for seats. Empty when nobody has been named. */
+  seatNames: SeatNames
   game: StoredGame
   /** The whole draw order for this game's seed. `game.history` is its front. */
   order: number[]
@@ -42,6 +44,7 @@ interface CallerScreenProps {
 
 export function CallerScreen({
   config,
+  seatNames,
   game,
   order,
   onDraw,
@@ -184,7 +187,7 @@ export function CallerScreen({
                 >
                   {winners.length === 0
                     ? 'Open'
-                    : winners.map((seat) => `Seat ${formatSeat(seat)}`).join(' + ')}{' '}
+                    : winners.map((seat) => seatLabel(seat, seatNames)).join(' + ')}{' '}
                   · {condition.points} pts
                 </span>
               </li>
@@ -195,6 +198,7 @@ export function CallerScreen({
 
       <ClaimVerifier
         config={config}
+        seatNames={seatNames}
         history={game.history}
         rulings={game.rulings}
         onRule={onRule}
@@ -216,8 +220,11 @@ export function CallerScreen({
               return (
                 <li key={index} className="stack-tight">
                   <div className="flex items-baseline justify-between gap-3">
+                    {/* Em dash rather than the "·" the rest of the screen uses: a named
+                        seat is already "Priya · seat 04", and a third dot in one line
+                        stops reading as a separator. */}
                     <span className="tabular-nums">
-                      Seat {formatSeat(ruling.seat)} ·{' '}
+                      {seatLabel(ruling.seat, seatNames)} —{' '}
                       {condition?.name ?? ruling.conditionId}
                     </span>
                     <span
@@ -280,7 +287,7 @@ export function CallerScreen({
           <ul className="card stack-tight">
             {bogeySeats.map((seat) => (
               <li key={seat} className="flex items-baseline justify-between gap-3">
-                <span className="tabular-nums">Seat {formatSeat(seat)}</span>
+                <span className="tabular-nums">{seatLabel(seat, seatNames)}</span>
                 <span className="muted is-bogey tabular-nums">
                   {bogeyCount(game.rulings, seat)}
                 </span>

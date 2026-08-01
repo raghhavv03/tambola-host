@@ -126,6 +126,12 @@ characters). See open decision **D1**.
   this hand-off is manual by design. Marking a seat given **withdraws it**: its QR
   disappears and it leaves the print sheet, so it cannot be handed out a second time by
   any route until the conductor undoes the tick.
+- Each seat can also carry an **optional name** the conductor types as they hand it over
+  ("Priya"). It is conductor-side only: it goes into neither the room code nor the QR
+  link, the player's device never sees it, and every conductor screen from then on reads
+  "Priya · seat 04" instead of "Seat 04". The seat number stays visible either way — it
+  is what is printed on the ticket in the player's hand. Unlike the winning conditions,
+  names stay editable once the game has started; a label is not a rule.
 - **Print mode** — an A4 sheet, six tickets per page, ID printed on each. Seats already
   given out are left off it.
 

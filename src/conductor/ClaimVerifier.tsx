@@ -15,11 +15,19 @@ import type { Condition } from '../engine/patterns'
 import type { RoomConfig } from '../engine/room'
 import { completionCall, verifyClaim, type ClaimResult } from '../engine/ticket'
 import { parseTicketId, ticketFromRef } from '../engine/ticketId'
-import { formatSeat, ticketCount } from './room'
+import {
+  formatSeat,
+  seatLabel,
+  seatLabelInline,
+  ticketCount,
+  type SeatNames,
+} from './room'
 import { canTie, hasBogeyed, splitPoints, winnersOf, type Ruling } from './game'
 
 interface ClaimVerifierProps {
   config: RoomConfig
+  /** The conductor's private labels for seats. Empty when nobody has been named. */
+  seatNames: SeatNames
   /** Every number called so far, oldest first. */
   history: number[]
   rulings: Ruling[]
@@ -79,13 +87,23 @@ function resolveSeat(raw: string, config: RoomConfig): { seat: number } | { erro
 }
 
 /** "seat 03 — 18 pts · seat 07 — 17 pts", so nobody splits 35 by hand at a party. */
-function describeSplit(condition: Condition, seats: number[]): string {
+function describeSplit(
+  condition: Condition,
+  seats: number[],
+  seatNames: SeatNames,
+): string {
   return splitPoints(condition.points, seats)
-    .map((share) => `seat ${formatSeat(share.seat)} — ${share.points} pts`)
+    .map((share) => `${seatLabelInline(share.seat, seatNames)} — ${share.points} pts`)
     .join(' · ')
 }
 
-export function ClaimVerifier({ config, history, rulings, onRule }: ClaimVerifierProps) {
+export function ClaimVerifier({
+  config,
+  seatNames,
+  history,
+  rulings,
+  onRule,
+}: ClaimVerifierProps) {
   const [seatText, setSeatText] = useState('')
   const [conditionId, setConditionId] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -212,7 +230,7 @@ export function ClaimVerifier({ config, history, rulings, onRule }: ClaimVerifie
                 {choice.condition.name} — {choice.condition.points} pts
                 {choice.winners.length > 0 &&
                   ` · tie open with ${choice.winners
-                    .map((s) => `seat ${formatSeat(s)}`)
+                    .map((s) => seatLabelInline(s, seatNames))
                     .join(' + ')}`}
               </option>
             ))}
@@ -229,7 +247,7 @@ export function ClaimVerifier({ config, history, rulings, onRule }: ClaimVerifie
       {pending !== null && (
         <div className="card stack-tight">
           <span className="label">
-            Seat {formatSeat(pending.seat)} · {pending.condition.name}
+            {seatLabel(pending.seat, seatNames)} — {pending.condition.name}
           </span>
 
           <p className={`title ${pending.result.valid ? 'is-valid' : 'is-bogey'}`}>
@@ -264,14 +282,14 @@ export function ClaimVerifier({ config, history, rulings, onRule }: ClaimVerifie
 
           {ineligible && (
             <p className="muted is-bogey">
-              Seat {formatSeat(pending.seat)} already bogeyed {pending.condition.name} and
+              {seatLabel(pending.seat, seatNames)} already bogeyed {pending.condition.name} and
               can't win it in this game.
             </p>
           )}
 
           {alreadyWon && (
             <p className="muted">
-              Seat {formatSeat(pending.seat)} has already won {pending.condition.name}.
+              {seatLabel(pending.seat, seatNames)} has already won {pending.condition.name}.
             </p>
           )}
 
@@ -282,7 +300,7 @@ export function ClaimVerifier({ config, history, rulings, onRule }: ClaimVerifie
               {pending.condition.name} was won on call {rulings.find(
                 (r) => r.conditionId === pending.condition.id && r.valid,
               )?.atCall}{' '}
-              by {winners.map((s) => `seat ${formatSeat(s)}`).join(' + ')}. A tie only
+              by {winners.map((s) => seatLabelInline(s, seatNames)).join(' + ')}. A tie only
               counts on the number it was won on, and that number has gone.
             </p>
           )}
@@ -291,7 +309,7 @@ export function ClaimVerifier({ config, history, rulings, onRule }: ClaimVerifie
             <p className="muted">
               Both shouted on this number, so recording this ties{' '}
               {pending.condition.name} and splits its {pending.condition.points} points:{' '}
-              {describeSplit(pending.condition, [...winners, pending.seat])}.
+              {describeSplit(pending.condition, [...winners, pending.seat], seatNames)}.
             </p>
           )}
 

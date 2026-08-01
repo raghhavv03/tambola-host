@@ -199,7 +199,7 @@ of them are features, all of them are the app breaking its own stated guarantees
   rest is a browser walk-through per CLAUDE.md's testing bar — these are layout and
   flow changes, not new logic.
 
-## P12 — Optional seat labels
+## P12 — Optional seat labels (built)
 
 - Conductor-side only, no carrier change, no airgap impact: the player's bundle never
   sees a name, so nothing is added to the room code or the QR blob — this is a label
@@ -212,6 +212,12 @@ of them are features, all of them are the app breaking its own stated guarantees
   "Priya · seat 04" when a name exists, falling back to "Seat 04" always.
   `ResultsScreen` is what gets read out at the end of the night; naming it beats a
   room full of "seat 07"s when it's time to actually split what got pooled.
+  - Built as `withSeatName` / `seatLabel` / `seatLabelInline` in `conductor/room.ts`,
+    with the field on each distribution row. Names stay editable mid-game — the rules
+    freeze at the first draw, a private label is not a rule.
+  - `withSeatName` caps but does not trim: it runs on every keystroke of a controlled
+    input, and trimming there ate the space in "Priya K" before the surname could be
+    started. `parseStoredRoom` does the trimming, on load.
 - Tests: `seatNames` persistence round-trip in `room.test.ts`.
 
 ## Later (not this iteration)

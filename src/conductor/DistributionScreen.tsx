@@ -23,7 +23,13 @@ import { encodeRoomConfig, formatRoomCode, uncarriedConditions } from '../engine
 import { JOIN_ROUTE, ticketUrl } from '../routes'
 import { QrCode } from './QrCode'
 import { PrintSheet } from './PrintSheet'
-import { formatSeat, playerOfSeat, ticketCount, type StoredRoom } from './room'
+import {
+  MAX_SEAT_NAME,
+  formatSeat,
+  playerOfSeat,
+  ticketCount,
+  type StoredRoom,
+} from './room'
 
 /** Seats per page. Six because that is also what fits on one printed sheet. */
 const PAGE_SIZE = 6
@@ -33,6 +39,8 @@ interface DistributionScreenProps {
   onToggleIssued: (seat: number) => void
   /** Mark several seats given in one go — the whole page on screen. Never un-marks. */
   onIssueSeats: (seats: number[]) => void
+  /** Put a name on a seat, or clear it by passing an empty string. */
+  onRenameSeat: (seat: number, name: string) => void
   /** Absent once the rules are frozen, i.e. from the first number out. */
   onEdit?: () => void
   onDiscard: () => void
@@ -46,12 +54,13 @@ export function DistributionScreen({
   room,
   onToggleIssued,
   onIssueSeats,
+  onRenameSeat,
   onEdit,
   onDiscard,
   onStart,
   onResume,
 }: DistributionScreenProps) {
-  const { config, issuedSeats } = room
+  const { config, issuedSeats, seatNames } = room
   const [page, setPage] = useState(0)
   const [printing, setPrinting] = useState(false)
   const [confirmingDiscard, setConfirmingDiscard] = useState(false)
@@ -141,48 +150,70 @@ export function DistributionScreen({
             const seat = entry.index
             const given = issued.has(seat)
             return (
-              <li key={entry.id} className="card flex items-center gap-4">
-                {given ? (
-                  // The QR is gone, not greyed out: a scannable code next to the words
-                  // "Given out" is exactly how one seat reaches two people. The box
-                  // stays the same size so the list doesn't jump as seats go out.
-                  <div className="flex size-[148px] shrink-0 items-center justify-center border border-neutral-300">
-                    <span className="muted">Given out</span>
-                  </div>
-                ) : (
-                  /* Big enough to matter: this QR carries the whole room, so it has
-                     a lot of modules and a small one is a QR a phone can't read. */
-                  <QrCode
-                    value={ticketUrl(origin, entry.id, encodedRoom)}
-                    size={148}
-                    className="shrink-0"
-                  />
-                )}
-                <div className="stack-tight min-w-0 flex-1">
-                  <span className="subtitle tabular-nums">Seat {formatSeat(seat)}</span>
-                  <span className="muted font-mono break-all">{entry.id}</span>
-                  <span className="muted">
-                    Player {playerOfSeat(seat, config.ticketsPerPlayer)}
-                  </span>
+              <li key={entry.id} className="card stack-tight">
+                <div className="flex items-center gap-4">
                   {given ? (
-                    // Undoing is deliberately the smaller action of the two: marking a
-                    // seat given is the common tap, taking it back is the correction.
-                    <button
-                      type="button"
-                      className="btn-inline self-start"
-                      onClick={() => onToggleIssued(seat)}
-                    >
-                      Undo
-                    </button>
+                    // The QR is gone, not greyed out: a scannable code next to the words
+                    // "Given out" is exactly how one seat reaches two people. The box
+                    // stays the same size so the list doesn't jump as seats go out.
+                    <div className="flex size-[148px] shrink-0 items-center justify-center border border-neutral-300">
+                      <span className="muted">Given out</span>
+                    </div>
                   ) : (
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={() => onToggleIssued(seat)}
-                    >
-                      Mark given
-                    </button>
+                    /* Big enough to matter: this QR carries the whole room, so it has
+                       a lot of modules and a small one is a QR a phone can't read. */
+                    <QrCode
+                      value={ticketUrl(origin, entry.id, encodedRoom)}
+                      size={148}
+                      className="shrink-0"
+                    />
                   )}
+                  <div className="stack-tight min-w-0 flex-1">
+                    <span className="subtitle tabular-nums">Seat {formatSeat(seat)}</span>
+                    <span className="muted font-mono break-all">{entry.id}</span>
+                    <span className="muted">
+                      Player {playerOfSeat(seat, config.ticketsPerPlayer)}
+                    </span>
+                    {given ? (
+                      // Undoing is deliberately the smaller action of the two: marking a
+                      // seat given is the common tap, taking it back is the correction.
+                      <button
+                        type="button"
+                        className="btn-inline self-start"
+                        onClick={() => onToggleIssued(seat)}
+                      >
+                        Undo
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => onToggleIssued(seat)}
+                      >
+                        Mark given
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Optional, and conductor-side only: this name goes into neither the
+                    room code nor the QR blob, so the player's phone never learns it.
+                    It is here so that the caller screen, the verifier and above all the
+                    results read out "Priya · seat 04" instead of a room full of numbers
+                    when it is time to split what got pooled. */}
+                <div className="stack-tight">
+                  <label className="label" htmlFor={`seat-name-${seat}`}>
+                    Who has this ticket (optional)
+                  </label>
+                  <input
+                    id={`seat-name-${seat}`}
+                    className="field"
+                    value={seatNames[seat] ?? ''}
+                    onChange={(event) => onRenameSeat(seat, event.target.value)}
+                    placeholder="Name"
+                    maxLength={MAX_SEAT_NAME}
+                    autoComplete="off"
+                  />
                 </div>
               </li>
             )
