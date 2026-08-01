@@ -318,13 +318,38 @@ State, not rules. Read with `PRD.md` (spec), `ROADMAP.md` (plan) and `CLAUDE.md`
     list and the block both gone → undo the draw → reload (3 called, game intact). No
     console errors.
 
+- **P10 offline reliability** (branch `major-changes`) — the second pre-launch
+  correctness phase.
+  - **Offline only ever worked at `/`.** `sw.ts` precached every built file and stopped
+    there, but Workbox's precache route only matches URLs that are IN the manifest, and
+    `/t`, `/join` and `/conduct` are not files — they're SPA paths that `vercel.json`
+    rewrites to `index.html` **at the server**. With no signal there is no server to do
+    that rewrite, so a scanned QR opened cold got a network error, contradicting both
+    `sw.ts`'s own header comment and CLAUDE.md's "offline-capable".
+  - Fix: `registerRoute(new NavigationRoute(createHandlerBoundToURL('index.html')))` —
+    the offline half of the same rule `vercel.json` applies online. Only navigations
+    match, and the handler serves a file already in the precache, so the worker is still
+    precache-only: it fetches nothing new and relays nothing between clients, which is
+    what `airgap.test.ts`'s service-worker check cares about.
+  - `workbox-routing` added as an explicit devDependency. It was already on disk as a
+    transitive of `workbox-build`; depending on it by name means a hoisting change can't
+    quietly take the fallback away.
+  - No vitest coverage: Workbox's navigation matching is a browser-only API, and a unit
+    test would only be asserting that we called a function we can see we called.
+  - Suite: 176 tests (unchanged — this phase adds no testable pure code), lint and build
+    clean. Verified in the browser against the real production build: load `/` once with
+    the preview server up (service worker installs, 17 precache entries, `index.html`
+    among them) → **stop the server** → cold-navigate to `/t#K3P9Z-04` (the ticket
+    renders, seat 04's real grid) → cold-navigate to `/conduct` (setup screen renders).
+    Neither path had ever been visited online, so nothing but the new navigation route
+    could have served them. No console errors.
+
 ## Next
 
-- **P10–P12 queued, not started** (see `ROADMAP.md`): no offline navigation fallback
-  despite the app claiming to be offline-capable, a caller screen that loses the called
-  number mid-claim, a hand-out flow that doesn't scale past a few players, and no way to
-  put a name on a seat for the results screen. The app is deployed, but the first real
-  game waits until those land.
+- **P11–P12 queued, not started** (see `ROADMAP.md`): a caller screen that loses the
+  called number mid-claim, a hand-out flow that doesn't scale past a few players, and no
+  way to put a name on a seat for the results screen. The app is deployed, but the first
+  real game waits until those land.
 - Beyond P12: `ROADMAP.md` under "Later" — design system, native build, backend — none
   of it starts without a decision to start it.
 
@@ -427,6 +452,11 @@ State, not rules. Read with `PRD.md` (spec), `ROADMAP.md` (plan) and `CLAUDE.md`
   game, it produces an unloadable one. Blocking the undo (rather than rewriting the
   rulings to fit, or loosening the check) keeps the invariant that made the corruption
   detectable in the first place.
+- **The service worker does offline exactly what `vercel.json` does online** (P10). Both
+  say "a path with no file behind it is `index.html`" — the host says it while there is a
+  host, the navigation route says it when there isn't. Keeping them the same rule in two
+  places is what makes a scanned QR work with no signal; a fallback that served anything
+  else, or that fetched, would break the precache-only invariant `sw.ts` is built around.
 - **A typed room code cannot validate that a seat exists** (accepted limitation, found
   in the P9–P12 review, not fixed). The code carries no ticket count by design (D1) —
   giving it one would spend characters catching a typo that already gets caught, just

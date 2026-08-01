@@ -55,14 +55,16 @@ version of it either.
   entry is `@import 'tailwindcss'` in `src/index.css`)
 - Vitest (`npm test`), node environment, config in `vitest.config.ts`
 - PWA via `vite-plugin-pwa` (injectManifest). We OWN the service worker `src/sw.ts` —
-  precache-only, never relays between clients; `airgap.test.ts` asserts that.
+  precache-only, never relays between clients; `airgap.test.ts` asserts that. It also
+  answers navigations with the precached `index.html`, which is the offline half of the
+  rewrite below — still precache-only, since it serves a file already cached.
 - No backend. No state library yet — add one only when a screen actually needs it.
 - **Native:** Capacitor wraps the web build (`android/`, `capacitor.config.ts`) — parked
   and unbuilt this iteration. Players never install anything; they scan a QR or type a
   room code.
 - **Deploy:** none of the routes have a file behind them, so a static host must rewrite
   unknown paths to `index.html` or scanned QRs 404. `vercel.json` does this; `vite dev`
-  already does it locally.
+  already does it locally; `src/sw.ts` does it when there's no signal at all.
 
 ## Structure
 

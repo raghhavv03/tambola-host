@@ -159,7 +159,7 @@ of them are features, all of them are the app breaking its own stated guarantees
   `parseStoredGame` / `parseRulings` path; `handleUndoRuling` reopening a condition it
   was the sole winner of, and clearing a bogey so the seat is eligible again.
 
-## P10 — Offline reliability
+## P10 — Offline reliability (built)
 
 - **Offline only works at `/`.** `sw.ts` is precache-only with no navigation fallback —
   Workbox's precache route only matches precached files, and `/t`, `/join`, `/conduct`
