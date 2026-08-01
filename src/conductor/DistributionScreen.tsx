@@ -31,6 +31,8 @@ const PAGE_SIZE = 6
 interface DistributionScreenProps {
   room: StoredRoom
   onToggleIssued: (seat: number) => void
+  /** Mark several seats given in one go — the whole page on screen. Never un-marks. */
+  onIssueSeats: (seats: number[]) => void
   /** Absent once the rules are frozen, i.e. from the first number out. */
   onEdit?: () => void
   onDiscard: () => void
@@ -43,6 +45,7 @@ interface DistributionScreenProps {
 export function DistributionScreen({
   room,
   onToggleIssued,
+  onIssueSeats,
   onEdit,
   onDiscard,
   onStart,
@@ -52,6 +55,7 @@ export function DistributionScreen({
   const [page, setPage] = useState(0)
   const [printing, setPrinting] = useState(false)
   const [confirmingDiscard, setConfirmingDiscard] = useState(false)
+  const [confirmingPage, setConfirmingPage] = useState(false)
 
   const total = ticketCount(config)
 
@@ -70,6 +74,12 @@ export function DistributionScreen({
   const issued = new Set(issuedSeats)
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const pageTickets = tickets.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE)
+
+  // The seats on this page nobody is holding yet — what the bulk action marks, and what
+  // its label counts. A page whose seats have all gone offers nothing.
+  const pageUngiven = pageTickets
+    .filter((entry) => !issued.has(entry.index))
+    .map((entry) => entry.index)
 
   // Paper is a way of handing a ticket out too, so a seat already given away is not on
   // the sheet. Reprinting the whole set halfway through is exactly how a seat ends up
@@ -179,12 +189,61 @@ export function DistributionScreen({
           })}
         </ul>
 
+        {/* Handing out one seat at a time is five pages of individual taps in a
+            thirty-player room, with everybody stood there waiting. The confirm is the
+            same weight as this screen's other bulk change ("Start a different room"),
+            because the thing it guards is the same: a state change across several
+            seats that only comes back one seat at a time. Offered from two seats up —
+            below that the row's own "Mark given" is already the shorter path. */}
+        {pageUngiven.length > 1 &&
+          (confirmingPage ? (
+            <div className="card stack-tight">
+              <p className="muted">
+                Mark all {pageUngiven.length} of these seats given out? Their QRs go off
+                the screen and their tickets leave the print sheet. Undoing is one seat
+                at a time.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    onIssueSeats(pageUngiven)
+                    setConfirmingPage(false)
+                  }}
+                >
+                  Mark them given
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setConfirmingPage(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-secondary btn-block"
+              onClick={() => setConfirmingPage(true)}
+            >
+              Mark {pageUngiven.length} on this page given
+            </button>
+          ))}
+
         {pageCount > 1 && (
           <div className="flex items-center justify-between gap-3">
             <button
               type="button"
               className="btn btn-secondary"
-              onClick={() => setPage((current) => Math.max(0, current - 1))}
+              onClick={() => {
+                // Turning the page abandons a confirm rather than carrying it over —
+                // the seats it was asking about are no longer the ones on screen.
+                setConfirmingPage(false)
+                setPage((current) => Math.max(0, current - 1))
+              }}
               disabled={page === 0}
             >
               Previous
@@ -195,7 +254,10 @@ export function DistributionScreen({
             <button
               type="button"
               className="btn btn-secondary"
-              onClick={() => setPage((current) => Math.min(pageCount - 1, current + 1))}
+              onClick={() => {
+                setConfirmingPage(false)
+                setPage((current) => Math.min(pageCount - 1, current + 1))
+              }}
               disabled={page >= pageCount - 1}
             >
               Next

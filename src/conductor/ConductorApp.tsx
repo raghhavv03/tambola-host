@@ -23,7 +23,7 @@ import { CallerScreen } from './CallerScreen'
 import { DistributionScreen } from './DistributionScreen'
 import { ResultsScreen } from './ResultsScreen'
 import { SetupScreen } from './SetupScreen'
-import { clearRoom, loadRoom, saveRoom, type StoredRoom } from './room'
+import { clearRoom, loadRoom, saveRoom, withSeatsIssued, type StoredRoom } from './room'
 import {
   canUndoDraw,
   clearGame,
@@ -92,6 +92,11 @@ export function ConductorApp() {
       issued.add(seat)
     }
     commitRoom({ ...room, issuedSeats: [...issued].sort((a, b) => a - b) })
+  }
+
+  function handleIssueSeats(seats: number[]) {
+    if (room === null) return
+    commitRoom({ ...room, issuedSeats: withSeatsIssued(room.issuedSeats, seats) })
   }
 
   function handleDiscard() {
@@ -170,6 +175,7 @@ export function ConductorApp() {
       <DistributionScreen
         room={room}
         onToggleIssued={handleToggleIssued}
+        onIssueSeats={handleIssueSeats}
         onEdit={isFrozen(game) ? undefined : () => setEditing(true)}
         onDiscard={handleDiscard}
         onStart={handleStartCalling}

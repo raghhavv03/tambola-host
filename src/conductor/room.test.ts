@@ -11,6 +11,7 @@ import {
   playerOfSeat,
   saveRoom,
   ticketCount,
+  withSeatsIssued,
 } from './room'
 
 let store: MockLocalStorage
@@ -49,6 +50,18 @@ describe('seats', () => {
     expect(formatSeat(0)).toBe('00')
     expect(formatSeat(7)).toBe('07')
     expect(formatSeat(42)).toBe('42')
+  })
+
+  it('marks a batch of seats given, sorted and de-duplicated', () => {
+    // The conductor hands out a whole page at once. Seat 6 was already ticked off
+    // individually, so the batch must not double it up.
+    expect(withSeatsIssued([6, 1], [6, 7, 8])).toEqual([1, 6, 7, 8])
+  })
+
+  it('only ever adds seats to the issued list', () => {
+    // No bulk undo: a seat somebody already walked away with must not come back on
+    // screen because a page was marked again.
+    expect(withSeatsIssued([0, 1, 2], [])).toEqual([0, 1, 2])
   })
 })
 

@@ -69,6 +69,35 @@
     gap: 0.5rem;
   }
 
+  /* The caller screen's second copy of the number just called, shown only once the
+     big one has scrolled off. Ruling on a claim happens far enough down that page
+     that the number everyone in the room is looking at would otherwise be gone from
+     the conductor's screen mid-verification.
+
+     Fixed rather than sticky: the bar appears part-way through a scroll, and a sticky
+     element reserves its space back at the top of the document, so the page would jump
+     under the conductor's thumb as it mounted. Layout only — no colour, no motion. */
+  .call-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    background: #fff;
+    border-bottom: 1px solid #d4d4d4;
+  }
+
+  /* Lines the bar's contents up with .screen's column instead of the window edge. */
+  .call-bar-inner {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    width: 100%;
+    max-width: 34rem;
+    margin-inline: auto;
+    padding: 0.5rem 1rem;
+  }
+
   /* --- Type scale ---------------------------------------------------------
      Four sizes, no more. Anything that needs a fifth is probably wrong. */
   .title {

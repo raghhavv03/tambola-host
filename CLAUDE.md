@@ -99,7 +99,9 @@ server — the room code IS the seed.
   `.subtitle`, `.label`, `.muted`), one control height (44px — `.btn`, `.field`,
   `.btn-inline`), one container (`.screen`), one surface (`.card`). `.callout` is the
   single exception, and only the caller screen's just-called number may use it — it is
-  read from across a room.
+  read from across a room. `.call-bar` is layout, not a fifth size: it repeats that same
+  number in existing sizes once the callout has scrolled off, and only the caller screen
+  uses it.
 - Two button looks, and only two: `.btn` (a box, optionally `.btn-secondary` /
   `.btn-block`) and `.btn-inline` (an underlined action that lives inside a list row,
   where a box would be bigger than the row it edits — "Undo", "Remove"). Both are 44px

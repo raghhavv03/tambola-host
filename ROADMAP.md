@@ -175,20 +175,26 @@ of them are features, all of them are the app breaking its own stated guarantees
     bar: load the app once online (so it precaches), go offline, open a `/t#…` link
     cold.
 
-## P11 — Live-game ergonomics
+## P11 — Live-game ergonomics (built)
 
 - **The caller screen loses the called number while checking a claim.**
   `ClaimVerifier` sits below the board and the conditions panel on `CallerScreen`, so
   confirming a claim scrolls the "just called" number off screen — the one number
-  everyone in the room is also looking at, mid-verification. Fix: a lightweight sticky
-  header repeating the latest call while scrolled. Pure functional `position: sticky`,
-  no colour or animation added — doesn't touch the "no design system" rule, it's
-  layout, not decoration.
+  everyone in the room is also looking at, mid-verification. Fix: a lightweight header
+  repeating the latest call while scrolled. No colour or animation added — doesn't
+  touch the "no design system" rule, it's layout, not decoration.
+  - Built as `position: fixed` (`.call-bar`) shown by an `IntersectionObserver` on the
+    callout card, not `position: sticky` as sketched: sticky reserves its space back at
+    the top of the document, so an element that only appears part-way down a scroll
+    shoves the page under the conductor's thumb as it mounts.
 - **Handing out tickets one by one doesn't scale past a few players.**
   `DistributionScreen` pages 6 seats at a time with one tap each; a 30-player room is
   five pages of individual taps while a room full of people waits. Add a per-page
   "Mark this page given" bulk action, same confirm-weight as the screen's other bulk
   state changes.
+  - Built as `withSeatsIssued` (`conductor/room.ts`) plus a confirm on
+    `DistributionScreen`, offered from two ungiven seats up. Adds only — no bulk undo,
+    per the P8 rule that a seat handed over stops being offered.
 - Tests: only where a bulk-issue helper is pure enough to earn one (`room.ts`); the
   rest is a browser walk-through per CLAUDE.md's testing bar — these are layout and
   flow changes, not new logic.

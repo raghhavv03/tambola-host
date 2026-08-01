@@ -344,12 +344,42 @@ State, not rules. Read with `PRD.md` (spec), `ROADMAP.md` (plan) and `CLAUDE.md`
     Neither path had ever been visited online, so nothing but the new navigation route
     could have served them. No console errors.
 
+- **P11 live-game ergonomics** (branch `major-changes`) — the third pre-launch phase.
+  - **The caller screen no longer loses the called number mid-claim.** `ClaimVerifier`
+    sits below the board and the conditions panel, so checking a claim scrolled the
+    just-called number off the top — the one number everyone in the room is also
+    looking at, at the moment it is being argued about. `CallerScreen` now watches the
+    callout card with an `IntersectionObserver` and renders `.call-bar` (number, "Just
+    called", numbers left) only once that card has actually gone. Layout only: no
+    colour, no motion, no new type size — the bar reuses `.label` / `.title` /
+    `.muted`.
+  - **Fixed, not sticky.** A sticky element reserves its space at its natural position
+    (the top of the document), so mounting one part-way through a scroll shoves the
+    page down under the conductor's thumb. `position: fixed` costs an overlay across
+    the top ~44px of whatever is being scrolled past, which is the cheaper of the two.
+  - **A page of tickets goes out in one action.** `DistributionScreen` handed seats out
+    one tap at a time, which is five pages of individual taps in a 30-player room while
+    everybody stands there. A "Mark N on this page given" button now covers the seats on
+    screen that haven't gone yet, behind the same inline confirm as "Start a different
+    room" — the two are the same kind of change, several seats at once with only a
+    one-at-a-time way back. Offered from two seats up; below that the row's own "Mark
+    given" is already the shorter path, and turning the page abandons an open confirm
+    rather than carrying it to seats it wasn't asking about.
+  - `conductor/room.ts` gained `withSeatsIssued(issuedSeats, seats)` — the pure half,
+    sorted and de-duplicated exactly the way the single-seat toggle keeps the list. It
+    only ever ADDS: there is no bulk undo, because un-giving a page is the one action
+    that could put a seat somebody already walked away with back on screen.
+  - Suite: 178 tests, lint and build clean. Walked in the browser at 375×812: a 14-seat
+    room → "Mark 6 on this page given" → confirm → all six lose their QRs, print drops
+    to "the 8 not given out" → page 3 offers "Mark 2" → open the confirm, turn the page,
+    confirm is gone and nothing was marked → reload (7 of 14, stored seats sorted) →
+    start calling → draw → scroll to the verifier (the bar appears with the number) →
+    scroll back (the bar goes, no duplicate). No console errors.
+
 ## Next
 
-- **P11–P12 queued, not started** (see `ROADMAP.md`): a caller screen that loses the
-  called number mid-claim, a hand-out flow that doesn't scale past a few players, and no
-  way to put a name on a seat for the results screen. The app is deployed, but the first
-  real game waits until those land.
+- **P12 queued, not started** (see `ROADMAP.md`): no way to put a name on a seat, so the
+  results screen reads out "seat 07" when it is time to split what got pooled.
 - Beyond P12: `ROADMAP.md` under "Later" — design system, native build, backend — none
   of it starts without a decision to start it.
 
@@ -457,6 +487,11 @@ State, not rules. Read with `PRD.md` (spec), `ROADMAP.md` (plan) and `CLAUDE.md`
   host, the navigation route says it when there isn't. Keeping them the same rule in two
   places is what makes a scanned QR work with no signal; a fallback that served anything
   else, or that fetched, would break the precache-only invariant `sw.ts` is built around.
+- **Bulk issue only ever adds** (P11). A page can be marked given in one action; there is
+  no "un-give this page". Undoing is per seat, deliberately the smaller control, because
+  the issue list has no backend behind it — it is the only thing stopping one ticket
+  reaching two people (P8), and a bulk undo is the one tap that could put a seat back on
+  screen after somebody already walked off with it.
 - **A typed room code cannot validate that a seat exists** (accepted limitation, found
   in the P9–P12 review, not fixed). The code carries no ticket count by design (D1) —
   giving it one would spend characters catching a typo that already gets caught, just

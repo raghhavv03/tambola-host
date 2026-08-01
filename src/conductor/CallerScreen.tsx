@@ -4,7 +4,7 @@
 // one on (PRD.md §3, rule 3) — the pace of a tambola game is a person reading the room,
 // and a countdown would take that away.
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { RoomConfig } from '../engine/room'
 import { ClaimVerifier } from './ClaimVerifier'
 import { NumberBoard } from './NumberBoard'
@@ -59,6 +59,25 @@ export function CallerScreen({
   // game.rulings. null while nothing is being confirmed.
   const [confirmingUndo, setConfirmingUndo] = useState<number | null>(null)
 
+  // The claim verifier sits below the board and the conditions panel, so checking a
+  // claim scrolls the just-called number off the top of the screen — the one number
+  // everyone in the room is also looking at, at the exact moment it is being argued
+  // about. This watches the big number and puts a compact copy back when it goes.
+  const calloutRef = useRef<HTMLElement | null>(null)
+  const [calloutOnScreen, setCalloutOnScreen] = useState(true)
+
+  useEffect(() => {
+    const node = calloutRef.current
+    if (node === null) return
+    // Default threshold: any sliver of the card still showing counts as on screen, so
+    // the bar appears only once the number has genuinely gone rather than half-way out.
+    const observer = new IntersectionObserver(([entry]) => {
+      setCalloutOnScreen(entry.isIntersecting)
+    })
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [])
+
   const called = useMemo(() => new Set(game.history), [game.history])
   const latest = latestCall(game)
   const remaining = order.length - game.history.length
@@ -84,7 +103,17 @@ export function CallerScreen({
 
   return (
     <div className="stack">
-      <section className="card stack-tight items-center text-center">
+      {latest !== null && !calloutOnScreen && (
+        <div className="call-bar">
+          <div className="call-bar-inner">
+            <span className="label">Just called</span>
+            <span className="title tabular-nums">{latest}</span>
+            <span className="muted tabular-nums">{remaining} left</span>
+          </div>
+        </div>
+      )}
+
+      <section ref={calloutRef} className="card stack-tight items-center text-center">
         {latest === null ? (
           // Before the first draw there is no number to show, and a placeholder set in
           // the callout size is a black bar across the screen.

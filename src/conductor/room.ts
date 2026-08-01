@@ -53,6 +53,22 @@ export function formatSeat(seat: number): string {
   return String(seat).padStart(2, '0')
 }
 
+/**
+ * Mark a batch of seats as given out, returning the new list sorted and de-duplicated
+ * exactly the way the one-seat-at-a-time toggle keeps it.
+ *
+ * One tap per seat is fine for a family game and unworkable for thirty players: a page
+ * of six is one action while a room full of people waits, not six. This only ever ADDS
+ * — there is no bulk undo, because "un-give a whole page" is not a thing that happens
+ * at a party, and it is the one action that could quietly put a seat back on screen
+ * after somebody already walked away with it.
+ */
+export function withSeatsIssued(issuedSeats: number[], seats: number[]): number[] {
+  const issued = new Set(issuedSeats)
+  for (const seat of seats) issued.add(seat)
+  return [...issued].sort((a, b) => a - b)
+}
+
 // --- Persistence ---------------------------------------------------------------
 
 /** Save the room. Returns false when storage is blocked or full. */
