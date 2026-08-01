@@ -416,11 +416,50 @@ State, not rules. Read with `PRD.md` (spec), `ROADMAP.md` (plan) and `CLAUDE.md`
     10 pts" → reload (names survive) → clear a name (the entry goes, the row falls back
     to "Seat 00") → retype "Priya K" (the space survives). No console errors.
 
+- **P13 the ledger survives the party** (branch `major-changes`) — found in a review pass
+  right after P12, and the last thing queued before a real game.
+  - **"Play again" now confirms.** `handlePlayAgain` wiped every ruling in the game and
+    wrote it to storage on one tap, from the filled `.btn` on the one screen people are
+    looking at while they work out how to split what they pooled. Every other destructive
+    action in the app already confirms — "Start a different room", "Remove this ticket",
+    and since P9 undoing a *single* ruling — so wiping all of them at once was the
+    exception. Same inline confirm as the rest, and the wording says what goes.
+  - **The ledger can leave the phone, two ways.** `conductor/results.ts` (`resultsText`)
+    is the plain-text half — "Copy the results", written for a message app, no markdown
+    and no column alignment because it gets pasted into WhatsApp far more often than
+    anywhere else. `conductor/ResultsSheet.tsx` is the paper half, built on exactly the
+    mechanism `PrintSheet` already uses: mounting it IS the print action, it replaces
+    the screen while the dialog is up, and `afterprint` brings the screen back.
+  - **All three read the same `seatScores`.** The screen, the sheet and the text can't
+    disagree about a split — which matters because the shares are what get read out when
+    the pot is divided (D2), and a tied Full House is 18 points on one line and 17 on
+    the next.
+  - A browser that refuses the clipboard (an insecure origin, a declined permission)
+    doesn't leave the button doing nothing: the text appears below it to be selected by
+    hand. Verified by stubbing `writeText` to reject.
+  - Both are conductor-side and strictly post-game, so the airgap is untouched:
+    `FORBIDDEN_APIS` in `airgap.test.ts` is fetch / XHR / WebSocket, and neither printing
+    nor the clipboard is a channel to a player.
+  - The confirm's two buttons read "New game" / "Keep results" rather than the fuller
+    sentences they started as — the pair sits side by side on a 375px phone, and longer
+    labels wrapped to two lines. The paragraph above them already says what each does.
+  - Suite: 193 tests (4 new, all on `resultsText` — a pure formatter is the one half of
+    this nobody can eyeball once it has been pasted elsewhere), lint and build clean.
+    Walked in the browser at 375×812 with a finished game (a tie, a bogey, four
+    conditions nobody took): Play again → confirm → "Keep results" leaves all four
+    rulings in storage → Copy → "Copied", and the fallback path renders the exact text
+    the screen shows → Print → the sheet renders the same ledger → back to the screen →
+    Play again → "New game" → fresh game, empty ledger, caller screen. No console errors.
+
 ## Next
 
-- Nothing queued. P9–P12 were the pre-launch correctness phases and all four are built.
-- Beyond that: `ROADMAP.md` under "Later" — design system, native build, backend — none
-  of it starts without a decision to start it.
+- **P14 is not a build phase — play a real game** (see `ROADMAP.md`). P9–P13 close every
+  correctness gap the review found; what gets built next is decided by what an actual
+  party breaks, not by more phases written at a desk.
+- Beyond that: `ROADMAP.md`'s "Later" section frames what comes next without committing
+  to it yet — P15 is proving the design pass on one screen (`CallerScreen`) before it
+  lands on all of them, since PRD §10's "no rebuild" claim has never been tested against
+  a single one.
 
 ## Key decisions (don't relitigate)
 
@@ -537,6 +576,11 @@ State, not rules. Read with `PRD.md` (spec), `ROADMAP.md` (plan) and `CLAUDE.md`
   send. The seat number stays visible alongside the name everywhere, because the number
   is what is printed on the ticket in the player's hand. Names are also editable
   mid-game, unlike the rules: a label is not a rule, and late arrivals still need one.
+- **The results leave the phone as a copy, never as a channel** (P13). Print and
+  clipboard are both conductor-side, both post-game, and both read the same `seatScores`
+  the screen does — so paper, text and screen can't disagree about a split. Nothing here
+  sends anything anywhere: the airgap is about a channel to a PLAYER, and a printed sheet
+  the conductor hands round the room is the same physical act as reading it out loud.
 - **A typed room code cannot validate that a seat exists** (accepted limitation, found
   in the P9–P12 review, not fixed). The code carries no ticket count by design (D1) —
   giving it one would spend characters catching a typo that already gets caught, just

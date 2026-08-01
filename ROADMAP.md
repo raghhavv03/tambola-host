@@ -220,7 +220,60 @@ of them are features, all of them are the app breaking its own stated guarantees
     started. `parseStoredRoom` does the trimming, on load.
 - Tests: `seatNames` persistence round-trip in `room.test.ts`.
 
+## P13 — the ledger survives the party (built)
+
+Found in a review pass right after P12: everything the conductor's ledger holds — every
+ruling, every point — lives in one `localStorage` record on one phone, with no way off
+it and, in one spot, no confirm before it's gone.
+
+- **"Play again" wipes the ledger with no confirm.** `handlePlayAgain`
+  (`ConductorApp.tsx`) calls `commitGame(newGame())` directly — every ruling gone,
+  written to storage immediately. It is the filled `.btn` on `ResultsScreen`, sitting
+  directly above the secondary "Back to the game", i.e. the most visually prominent
+  button on the one screen people are looking at when it's time to split what they
+  pooled. Every other destructive action in the app confirms first — "Start a
+  different room", "Remove this ticket", even undoing a *single* ruling since P9 — and
+  this one, which destroys *all* of them at once, is the exception. Fix: the same
+  inline confirm those already use, gated the same way.
+- **The ledger can't leave the phone.** No export, no print, no clipboard, no way to
+  read the results off anything but the conductor's screen. That means a dead battery
+  or a cleared browser loses the whole night, and in practice the room ends up crowded
+  around one phone to see who won what. `PrintSheet` (`conductor/PrintSheet.tsx`)
+  already does the print half of this job for tickets, `@page` CSS and all — a results
+  sheet reuses that, not a new mechanism. Add a plain-text "copy the results" action
+  alongside it for a phone that isn't near a printer.
+  - Both are conductor-side and strictly post-game: nothing here touches the player's
+    bundle, and `FORBIDDEN_APIS` in `airgap.test.ts` (fetch / XHR / WebSocket) has
+    nothing to say about printing or clipboard, so the airgap is unaffected either way.
+  - Built as `conductor/results.ts` (`resultsText`, the plain-text half) and
+    `conductor/ResultsSheet.tsx` (the paper half, same mount-and-print mechanism as
+    `PrintSheet`). Both read the same `seatScores` the screen does, so the three can't
+    disagree about how the pot gets split. The copy action falls back to showing the
+    text to be selected by hand when a browser refuses the clipboard.
+- Tests: the confirm gate and the sheet are browser-verified, per CLAUDE.md's bar. The
+  text export did earn unit tests after all — `resultsText` is a pure formatter, and it
+  is the one of the two that nobody can eyeball against the screen once it has been
+  pasted somewhere else. Verified in the browser: play-again is behind a confirm and
+  cancel doesn't touch the game; the sheet and the copied text both match the screen.
+
 ## Later (not this iteration)
+
+**P14 — play the real game.** Not a build phase. Every good thing that happened from
+P6 onward came out of an actual game exposing what the desk couldn't guess — the tie
+window, the late-claim rule, the seat-given-out-twice bug all came from playtesting,
+none from further design at a keyboard. P9–P13 close every correctness gap found by
+review; the app has never been in a better state to learn from a real one. Whatever
+P14 actually contains gets decided by what that game breaks, not written here in
+advance.
+
+**P15 — pilot the design pass on one screen.** PRD §10 claims the eventual visual pass
+lands as "colour, type and motion — not a rebuild", because every screen is already
+positioned where the designed version will put it. That claim has not been tested
+against a single screen, and it gets more expensive to be wrong about with every
+screen that hardens further around plain CSS in the meantime. Before committing to the
+pass across the whole app: take `CallerScreen` — the most-used screen in the app — and
+give it the real intended visual treatment. If the claim holds, the rest is confidence,
+not risk. If it doesn't, one screen is the cost of finding out, not a dozen.
 
 Design system and animation · theme packs · native app build · accounts and social
 login · backend (fixes the code-vs-QR rule-sharing gap, enables live sync and rooms that

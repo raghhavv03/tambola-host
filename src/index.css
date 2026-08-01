@@ -247,9 +247,11 @@
 }
 
 /* ============================================================================
-   Print. Only the ticket sheet ever reaches paper: screen UI is print:hidden,
-   PrintSheet is hidden on screen and print:block. A4 with an 8mm margin leaves
-   ~194mm of usable width — nine columns at ~21mm each, wide enough for a pen.
+   Print. Two things reach paper, both conductor-side and both built the same way:
+   PrintSheet (the tickets) and ResultsSheet (the end-of-night ledger). Each is
+   hidden on screen and print:block, and each replaces the screen it was opened
+   from while the dialog is up. A4 with an 8mm margin leaves ~194mm of usable
+   width — nine columns at ~21mm each, wide enough for a pen.
    ========================================================================= */
 @page {
   size: A4;
